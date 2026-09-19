@@ -57,13 +57,21 @@ plugins/creator-dataset/
 └── skills/creator-research/SKILL.md
 ```
 
-启动本地 MCP：
+本地自用推荐一条命令启动：
 
 ```bash
 pip install -e ".[agent,xhs,ocr,stt]"
-creator-dataset-worker
-creator-dataset-mcp
+creator-dataset-agent --check
+creator-dataset-agent
 ```
+
+它会同时运行 Worker + MCP。需要定期增量刷新时：
+
+```bash
+creator-dataset-agent --with-scheduler
+```
+
+仍然可以分别启动 `creator-dataset-worker` / `creator-dataset-mcp` 做调试。
 
 默认 MCP：
 
