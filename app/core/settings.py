@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     saas_bootstrap_admin_key: str = ""
     saas_default_free_dataset_credits: int = 5
 
+    # Optional user-connected LLM organization layer.
+    llm_enabled: bool = False
+    llm_credential_encryption_key: str = ""
+    llm_allowed_hosts: str = ""
+    llm_allow_custom_base_url_local: bool = True
+    llm_max_input_chars: int = 120000
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
