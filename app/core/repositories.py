@@ -135,8 +135,8 @@ class CommentRepository:
                user_id: str | None, user_name: str | None, user_avatar: str | None,
                content: str | None, like_count: int | None, ip_location: str | None,
                published_at: int | str | None, depth: int, has_more_replies: bool,
-               reply_count: int, pictures: list[Any], picture_urls: list[str] | None = None,
-               raw: dict[str, Any] = {}) -> None:
+               reply_count: int, pictures: list[Any], picture_urls: list[str],
+               raw: dict[str, Any]) -> None:
         with db_session() as connection:
             connection.execute("""
                 INSERT INTO comments (
