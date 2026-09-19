@@ -50,7 +50,7 @@ async def protect_internal_api(request: Request, call_next):
     }
 
     if (
-        settings.saas_auth_enabled
+        getattr(settings, "saas_auth_enabled", False)
         and path.startswith("/api/")
         and not path.startswith("/api/saas/")
         and path not in public_paths
