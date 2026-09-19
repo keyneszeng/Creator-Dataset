@@ -1,4 +1,8 @@
+import time
 from typing import Any
+
+from app.core.rate_limit import SharedRateLimiter
+from app.core.settings import get_settings
 
 from app.core.credentials import EnvironmentCredentialProvider, parse_cookie_header
 from app.core.errors import IntegrationNotInstalled, PlatformBlocked, PlatformRequestError
@@ -9,6 +13,10 @@ class XiaohongshuGateway:
 
     def __init__(self, credential_provider: EnvironmentCredentialProvider | None = None) -> None:
         self.credential_provider = credential_provider or EnvironmentCredentialProvider()
+        self.rate_limiter = SharedRateLimiter(
+            key="xiaohongshu-api",
+            min_interval_seconds=get_settings().xhs_min_interval_seconds,
+        )
 
     def _client(self):
         try:
@@ -27,6 +35,10 @@ class XiaohongshuGateway:
         return client, (IpBlockedError, NeedVerifyError, SessionExpiredError), XhsApiError
 
     def _run(self, action):
+        delay = self.rate_limiter.reserve_delay()
+        if delay > 0:
+            time.sleep(delay)
+
         client, blocked_errors, api_error = self._client()
         try:
             return action(client)
