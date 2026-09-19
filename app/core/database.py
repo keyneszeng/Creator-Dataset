@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS posts (
     downloaded_comment_count INTEGER DEFAULT 0,
     comment_status TEXT,
     raw_json TEXT,
+    platform_context_json TEXT,
+    detail_raw_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(platform, post_id)
@@ -155,6 +157,33 @@ def db_session(database_path: Path | None = None) -> Iterator[sqlite3.Connection
         connection.close()
 
 
+def _ensure_column(
+    connection: sqlite3.Connection,
+    *,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    existing = {row["name"] for row in rows}
+    if column not in existing:
+        connection.execute(
+            f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+        )
+
+
 def init_database(database_path: Path | None = None) -> None:
     with db_session(database_path) as connection:
         connection.executescript(SCHEMA)
+        _ensure_column(
+            connection,
+            table="posts",
+            column="platform_context_json",
+            definition="TEXT",
+        )
+        _ensure_column(
+            connection,
+            table="posts",
+            column="detail_raw_json",
+            definition="TEXT",
+        )
