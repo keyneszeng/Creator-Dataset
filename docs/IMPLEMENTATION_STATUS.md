@@ -379,3 +379,35 @@ Multi-host cloud = Postgres + S3
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
+
+
+## PostgreSQL / Multi-node Cloud
+
+- [x] PostgreSQL Creator repository
+- [x] PostgreSQL Post repository
+- [x] PostgreSQL Comment repository
+- [x] PostgreSQL Media repository
+- [x] PostgreSQL OCR/STT repositories
+- [x] PostgreSQL Refresh repositories
+- [x] PostgreSQL Validation repository
+- [x] PostgreSQL Worker registry
+- [x] PostgreSQL shared platform rate limiter
+- [x] Durable queue using FOR UPDATE SKIP LOCKED
+- [x] concurrent Worker claim integration tests
+- [x] concurrent idempotent enqueue test
+- [x] Scheduler advisory leadership lock
+- [x] Scheduler HA integration test
+- [x] backend-factory operations APIs
+- [x] versioned PostgreSQL migrations
+- [x] migration advisory lock for rolling deploys
+- [x] shared per-process PostgreSQL connection pool
+- [x] graceful API pool shutdown
+- [x] PostgreSQL pg_dump backup support
+- [x] cloud-postgres Compose
+- [x] Postgres + MinIO cloud-dev Compose
+- [x] multi-host capability requires PostgreSQL + S3
+- [ ] authentication / tenant isolation
+- [ ] Prometheus / OpenTelemetry metrics
+- [ ] queue-age / error-rate / storage alerts
+- [ ] managed Kubernetes/ECS/Cloud Run templates
+- [ ] automated restore drill
