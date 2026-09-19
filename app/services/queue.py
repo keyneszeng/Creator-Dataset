@@ -174,20 +174,27 @@ class QueueService:
     ) -> EnqueueCreatorImportResult:
         resolved = resolve_creator_url(url)
         creator_id = resolved.creator_id
-        key = f"creator-import:xiaohongshu:{creator_id}"
-
-        job_id = self.jobs.enqueue(
-            job_type="CREATOR_IMPORT",
-            platform="xiaohongshu",
-            creator_id=creator_id,
+        key = f"creator-import:v2:xiaohongshu:{creator_id}"
+        existing = self.jobs.get_by_idempotency_key(
             idempotency_key=key,
-            payload={
-                "url": resolved.canonical_url,
-                "max_pages": max_pages,
-            },
-            priority=70,
-            max_attempts=5,
         )
+        if existing is not None:
+            job_id = int(existing["id"])
+            if str(existing["status"]) in {"FAILED", "PARTIAL"}:
+                self.jobs.repair_subgraph(job_id=job_id)
+        else:
+            job_id = self.jobs.enqueue(
+                job_type="CREATOR_IMPORT",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                idempotency_key=key,
+                payload={
+                    "url": resolved.canonical_url,
+                    "max_pages": max_pages,
+                },
+                priority=70,
+                max_attempts=100,
+            )
 
         return EnqueueCreatorImportResult(
             creator_id=creator_id,
