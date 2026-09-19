@@ -79,7 +79,7 @@ https://www.xiaohongshu.com/user/profile/<creator_id>
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -e ".[dev,xhs,ocr]"
+pip install -e ".[dev,xhs,ocr,stt]"
 
 uvicorn app.main:app --reload
 ```
@@ -126,6 +126,8 @@ pytest
 - [当前实现状态](docs/IMPLEMENTATION_STATUS.md)
 - [OCR Pipeline](docs/OCR.md)
 - [Media Pipeline](docs/MEDIA_PIPELINE.md)
+- [Video STT](docs/STT.md)
+- [Analysis Corpus](docs/ANALYSIS_CORPUS.md)
 
 ## V0.1 技术建议
 
@@ -170,7 +172,7 @@ Post Media / Comment Media
   ↓
 Download + SHA256
   ↓
-OCR
+OCR + Video STT
   ↓
 Comments + Replies
   ↓
@@ -184,6 +186,7 @@ JSON / JSONL / Markdown Dataset
 ```text
 POST /api/creators/import
 POST /api/creators/{creator_id}/enrich-posts
+POST /api/creators/{creator_id}/run-pipeline
 POST /api/posts/{post_id}/crawl-comments
 POST /api/posts/{post_id}/process-media
 POST /api/posts/{post_id}/export
