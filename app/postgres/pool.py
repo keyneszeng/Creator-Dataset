@@ -2,6 +2,7 @@ from threading import Lock
 from typing import Any
 
 from app.core.errors import IntegrationNotInstalled
+from app.core.settings import get_settings
 
 
 _POOLS: dict[str, Any] = {}
@@ -22,8 +23,8 @@ def _pool_class():
 def get_postgres_pool(
     database_url: str,
     *,
-    min_size: int = 1,
-    max_size: int = 10,
+    min_size: int | None = None,
+    max_size: int | None = None,
 ):
     if not database_url:
         raise ValueError("database_url is required for PostgreSQL.")
@@ -33,11 +34,22 @@ def get_postgres_pool(
         if pool is not None:
             return pool
 
+        settings = get_settings()
+        resolved_min = (
+            settings.postgres_pool_min_size
+            if min_size is None
+            else min_size
+        )
+        resolved_max = (
+            settings.postgres_pool_max_size
+            if max_size is None
+            else max_size
+        )
         ConnectionPool, dict_row = _pool_class()
         pool = ConnectionPool(
             conninfo=database_url,
-            min_size=min_size,
-            max_size=max_size,
+            min_size=resolved_min,
+            max_size=resolved_max,
             kwargs={"row_factory": dict_row},
             open=True,
         )
