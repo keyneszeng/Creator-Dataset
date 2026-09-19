@@ -1,8 +1,14 @@
 import asyncio
 from dataclasses import dataclass
 
-from app.core.checkpoints import CheckpointRepository
-from app.core.repositories import CreatorRepository, PostRepository, RawSnapshotRepository
+from typing import Any
+
+from app.repositories.factory import (
+    create_checkpoint_repository,
+    create_creator_repository,
+    create_post_repository,
+    create_raw_snapshot_repository,
+)
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 from app.platforms.xiaohongshu.normalizers import (
     normalize_creator,
@@ -23,16 +29,16 @@ class CreatorImportService:
     def __init__(
         self,
         gateway: XiaohongshuGateway | None = None,
-        creator_repository: CreatorRepository | None = None,
-        post_repository: PostRepository | None = None,
-        checkpoint_repository: CheckpointRepository | None = None,
-        raw_snapshots: RawSnapshotRepository | None = None,
+        creator_repository: Any | None = None,
+        post_repository: Any | None = None,
+        checkpoint_repository: Any | None = None,
+        raw_snapshots: Any | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
-        self.creators = creator_repository or CreatorRepository()
-        self.posts = post_repository or PostRepository()
-        self.checkpoints = checkpoint_repository or CheckpointRepository()
-        self.raw_snapshots = raw_snapshots or RawSnapshotRepository()
+        self.creators = creator_repository or create_creator_repository()
+        self.posts = post_repository or create_post_repository()
+        self.checkpoints = checkpoint_repository or create_checkpoint_repository()
+        self.raw_snapshots = raw_snapshots or create_raw_snapshot_repository()
 
     async def import_creator(
         self, url: str, *, max_pages: int = 20
