@@ -18,8 +18,11 @@ from app.core.repositories import JobRepository, WorkerRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
 from app.services.export import ExportService
-from app.services.media_pipeline import MediaPipelineService
+from app.services.media import MediaDownloadService
+from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
+from app.services.stt import SttService
+from app.services.validation import ValidationService
 
 JobHandler = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -46,44 +49,75 @@ class DurableWorker:
         self.heartbeat_seconds = settings.worker_heartbeat_seconds
         self.poll_seconds = settings.worker_poll_seconds
         self.handlers = handlers or {
-            "POST_PIPELINE": self._handle_post_pipeline,
+            "POST_DETAIL": self._handle_post_detail,
+            "COMMENTS": self._handle_comments,
+            "MEDIA_DOWNLOAD": self._handle_media_download,
+            "OCR": self._handle_ocr,
+            "STT": self._handle_stt,
+            "VALIDATION": self._handle_validation,
+            "EXPORT": self._handle_export,
         }
 
-    async def _handle_post_pipeline(self, job: dict[str, Any]) -> None:
-        post_id = str(job["post_id"])
+    async def _handle_post_detail(self, job: dict[str, Any]) -> None:
+        await PostDetailService().enrich_post(str(job["post_id"]))
+
+    async def _handle_comments(self, job: dict[str, Any]) -> None:
+        result = await CommentCrawlService().crawl_post(str(job["post_id"]))
+        if result.status != "COMPLETE":
+            raise RuntimeError(
+                f"Comment crawl incomplete for {job['post_id']}: "
+                f"{result.status}"
+            )
+
+    async def _handle_media_download(self, job: dict[str, Any]) -> None:
+        result = await MediaDownloadService().download_post_media(
+            str(job["post_id"]),
+            limit=500,
+        )
+        if int(result.get("failed") or 0):
+            raise RuntimeError(
+                f"Media download has {result['failed']} failed item(s)."
+            )
+
+    async def _handle_ocr(self, job: dict[str, Any]) -> None:
+        result = await OcrService().process_post_images(
+            str(job["post_id"]),
+            include_comment_images=True,
+            only_missing=True,
+            limit=2000,
+        )
+        if int(result.get("failed") or 0):
+            raise RuntimeError(
+                f"OCR has {result['failed']} failed item(s)."
+            )
+
+    async def _handle_stt(self, job: dict[str, Any]) -> None:
+        result = await SttService().process_post_videos(
+            str(job["post_id"]),
+            only_missing=True,
+            limit=200,
+        )
+        if int(result.get("failed") or 0):
+            raise RuntimeError(
+                f"STT has {result['failed']} failed item(s)."
+            )
+
+    async def _handle_validation(self, job: dict[str, Any]) -> None:
         payload = job.get("payload") or {}
-
-        await PostDetailService().enrich_post(post_id)
-
-        if payload.get("run_comments", True):
-            comment_result = await CommentCrawlService().crawl_post(post_id)
-            if comment_result.status != "COMPLETE":
-                raise RuntimeError(
-                    f"Comment crawl incomplete for {post_id}: "
-                    f"{comment_result.status}"
-                )
-
-        if payload.get("run_media", True):
-            media_result = await MediaPipelineService().process_post(
-                post_id,
-                run_ocr=bool(payload.get("run_ocr", True)),
-                run_stt=bool(payload.get("run_stt", True)),
+        result = ValidationService().validate_post(
+            str(job["post_id"]),
+            require_comments=bool(payload.get("require_comments", True)),
+            require_media=bool(payload.get("require_media", True)),
+            require_ocr=bool(payload.get("require_ocr", True)),
+            require_stt=bool(payload.get("require_stt", True)),
+        )
+        if not result.complete:
+            raise RuntimeError(
+                "Validation failed: " + ", ".join(result.issues)
             )
-            download = media_result.get("download") or {}
-            ocr = media_result.get("ocr") or {}
-            stt = media_result.get("stt") or {}
-            failed = (
-                int(download.get("failed") or 0)
-                + int(ocr.get("failed") or 0)
-                + int(stt.get("failed") or 0)
-            )
-            if failed:
-                raise RuntimeError(
-                    f"Media pipeline has {failed} failed item(s) for {post_id}."
-                )
 
-        if payload.get("export", True):
-            ExportService().export_post(post_id)
+    async def _handle_export(self, job: dict[str, Any]) -> None:
+        ExportService().export_post(str(job["post_id"]))
 
     async def _heartbeat_loop(
         self,
@@ -113,9 +147,11 @@ class DurableWorker:
     async def run_once(self) -> bool:
         self.workers.touch(worker_id=self.worker_id)
         recovered = self.jobs.recover_expired_leases()
-        if recovered:
+        dependency_terminal = self.jobs.resolve_failed_dependencies()
+
+        if recovered or dependency_terminal:
             logger.warning(
-                "recovered expired job leases",
+                "queue recovery performed",
                 extra={"worker_id": self.worker_id},
             )
 
@@ -127,7 +163,6 @@ class DurableWorker:
             return False
 
         job_id = int(job["id"])
-        parent_job_id = job.get("parent_job_id")
         handler = self.handlers.get(str(job["job_type"]))
 
         self.workers.touch(
@@ -168,10 +203,6 @@ class DurableWorker:
             )
 
         except (AuthenticationRequired, PlatformBlocked) as exc:
-            logger.warning(
-                "job blocked",
-                extra={"worker_id": self.worker_id, "job_id": job_id},
-            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -179,10 +210,6 @@ class DurableWorker:
             )
 
         except IntegrationNotInstalled as exc:
-            logger.error(
-                "job integration missing",
-                extra={"worker_id": self.worker_id, "job_id": job_id},
-            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -190,10 +217,6 @@ class DurableWorker:
             )
 
         except ValueError as exc:
-            logger.error(
-                "job failed permanently",
-                extra={"worker_id": self.worker_id, "job_id": job_id},
-            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -210,10 +233,8 @@ class DurableWorker:
             stop.set()
             await heartbeat_task
             self.workers.clear_job(worker_id=self.worker_id)
-            if parent_job_id:
-                self.jobs.reconcile_parent(
-                    parent_job_id=int(parent_job_id)
-                )
+            self.jobs.resolve_failed_dependencies()
+            self.jobs.reconcile_ancestors(job_id=job_id)
 
         return True
 
