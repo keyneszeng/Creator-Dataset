@@ -25,6 +25,14 @@ class ObjectStore(Protocol):
     def delete(self, *, key: str) -> None:
         ...
 
+    def access_url(
+        self,
+        *,
+        key: str,
+        expires_seconds: int = 900,
+    ) -> str | None:
+        ...
+
     def materialize(
         self,
         *,
