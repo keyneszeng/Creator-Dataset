@@ -13,7 +13,7 @@ mcp = MCPServer(
     "creator-dataset",
     instructions=(
         "Use Creator Dataset to import public creator profiles, browse compact "
-        "post catalogs, unlock selected datasets only with user intent, and "
+        "post catalogs, prepare structured datasets on demand, and "
         "retrieve structured creator knowledge for analysis. Prefer compact "
         "tools first and fetch detailed content only when needed."
     ),
@@ -26,7 +26,7 @@ def _service() -> AgentService:
 
 @mcp.tool()
 def account_status() -> dict:
-    """Return the current account role and Dataset credit balance."""
+    """Return the current Agent access mode and role."""
     return _service().account_status()
 
 
@@ -35,7 +35,7 @@ def creator_submit(url: str, max_pages: int = 20) -> dict:
     """
     Submit a public Creator profile URL for background import.
 
-    This does not consume Dataset credits. The import is asynchronous.
+    The import is asynchronous and free.
     """
     return _service().creator_submit(url, max_pages=max_pages)
 
@@ -53,9 +53,9 @@ def creator_posts(
     offset: int = 0,
 ) -> dict:
     """
-    Browse a compact Creator Post catalog without consuming Dataset credits.
+    Browse a compact Creator Post catalog for free.
 
-    Results include title, date, engagement, unlock status, and readiness.
+    Results include title, date, engagement, availability, and readiness.
     """
     return _service().creator_posts(
         creator_id,
@@ -65,14 +65,14 @@ def creator_posts(
 
 
 @mcp.tool()
-def dataset_unlock(post_id: str, confirm: bool = False) -> dict:
+def dataset_prepare(post_id: str) -> dict:
     """
-    Preview or perform a Dataset unlock.
+    Prepare the full structured Dataset for a Post.
 
-    Call with confirm=false first unless the user explicitly asked to unlock
-    this specific Post. A new unlock may consume one free or paid credit.
+    This capability is currently free. It never consumes credits or requires
+    payment confirmation.
     """
-    return _service().dataset_unlock(post_id, confirm=confirm)
+    return _service().dataset_prepare(post_id)
 
 
 @mcp.tool()
