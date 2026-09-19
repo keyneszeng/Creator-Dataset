@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.core.database import db_session
@@ -393,3 +394,91 @@ class SqliteSaasRepository:
                 (api_key_id, user_id),
             )
         return cursor.rowcount == 1
+
+
+    def apply_paid_credit_purchase(
+        self,
+        *,
+        provider: str,
+        event_id: str,
+        user_id: int,
+        credits: int,
+        amount_minor: int | None,
+        currency: str | None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if credits <= 0:
+            raise ValueError("Purchased credits must be positive.")
+
+        with db_session() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            user = connection.execute(
+                "SELECT id FROM users WHERE id=?",
+                (user_id,),
+            ).fetchone()
+            if user is None:
+                raise ValueError("Unknown user.")
+
+            existing = connection.execute(
+                """
+                SELECT id
+                FROM billing_events
+                WHERE provider=? AND event_id=?
+                """,
+                (provider, event_id),
+            ).fetchone()
+            if existing:
+                return {
+                    "billing_event_id": int(existing["id"]),
+                    "applied": False,
+                    "credits": self.credit_balance(user_id=user_id),
+                }
+
+            cursor = connection.execute(
+                """
+                INSERT INTO billing_events (
+                    provider, event_id, user_id, event_type, status,
+                    credits, amount_minor, currency, payload_json
+                ) VALUES (?, ?, ?, 'credit_purchase', 'completed', ?, ?, ?, ?)
+                """,
+                (
+                    provider,
+                    event_id,
+                    user_id,
+                    credits,
+                    amount_minor,
+                    currency,
+                    json.dumps(payload or {}, ensure_ascii=False),
+                ),
+            )
+            billing_event_id = int(cursor.lastrowid)
+
+            connection.execute(
+                """
+                INSERT INTO credit_ledger (
+                    user_id, bucket, delta, reason, reference_id
+                ) VALUES (?, 'paid', ?, 'payment_purchase', ?)
+                """,
+                (user_id, credits, f"{provider}:{event_id}"),
+            )
+
+            rows = connection.execute(
+                """
+                SELECT bucket, COALESCE(SUM(delta), 0) AS balance
+                FROM credit_ledger
+                WHERE user_id=?
+                GROUP BY bucket
+                """,
+                (user_id,),
+            ).fetchall()
+
+        balances = {"free": 0, "paid": 0}
+        for row in rows:
+            balances[str(row["bucket"])] = int(row["balance"] or 0)
+        balances["total"] = balances["free"] + balances["paid"]
+
+        return {
+            "billing_event_id": billing_event_id,
+            "applied": True,
+            "credits": balances,
+        }
