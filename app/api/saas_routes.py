@@ -201,6 +201,46 @@ async def revoke_api_key(
     return {"user_id": user_id, "api_key_id": api_key_id, "revoked": True}
 
 
+@router.get("/admin/users/{user_id}/entitlements")
+async def admin_user_entitlements(
+    user_id: int,
+    limit: int = 200,
+    _: Principal = Depends(require_admin),
+) -> dict[str, Any]:
+    repository = create_saas_repository()
+    if repository.get_user(user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown user.")
+    items = repository.list_entitlements(
+        user_id=user_id,
+        limit=max(1, min(limit, 1000)),
+    )
+    return {
+        "user_id": user_id,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.get("/admin/users/{user_id}/billing-events")
+async def admin_user_billing_events(
+    user_id: int,
+    limit: int = 200,
+    _: Principal = Depends(require_admin),
+) -> dict[str, Any]:
+    repository = create_saas_repository()
+    if repository.get_user(user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown user.")
+    items = repository.list_billing_events(
+        user_id=user_id,
+        limit=max(1, min(limit, 1000)),
+    )
+    return {
+        "user_id": user_id,
+        "count": len(items),
+        "items": items,
+    }
+
+
 @router.get("/me")
 async def me(
     principal: Principal = Depends(require_principal),
