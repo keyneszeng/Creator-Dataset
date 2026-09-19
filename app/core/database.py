@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS media (
     height INTEGER,
     duration REAL,
     download_status TEXT NOT NULL DEFAULT 'PENDING',
+    is_active BOOLEAN NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -370,6 +371,12 @@ def init_database(database_path: Path | None = None) -> None:
                 column=column,
                 definition=definition,
             )
+        _ensure_column(
+            connection,
+            table="media",
+            column="is_active",
+            definition="BOOLEAN NOT NULL DEFAULT 1",
+        )
         for column, definition in (
             ("parent_job_id", "INTEGER"),
             ("idempotency_key", "TEXT"),
