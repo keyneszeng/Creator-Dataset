@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS media (
     media_type TEXT NOT NULL,
     remote_url TEXT NOT NULL,
     local_path TEXT,
+    storage_backend TEXT,
+    storage_key TEXT,
     sha256 TEXT,
     width INTEGER,
     height INTEGER,
@@ -390,12 +392,17 @@ def init_database(database_path: Path | None = None) -> None:
                 column=column,
                 definition=definition,
             )
-        _ensure_column(
-            connection,
-            table="media",
-            column="is_active",
-            definition="BOOLEAN NOT NULL DEFAULT 1",
-        )
+        for column, definition in (
+            ("storage_backend", "TEXT"),
+            ("storage_key", "TEXT"),
+            ("is_active", "BOOLEAN NOT NULL DEFAULT 1"),
+        ):
+            _ensure_column(
+                connection,
+                table="media",
+                column=column,
+                definition=definition,
+            )
         for column, definition in (
             ("parent_job_id", "INTEGER"),
             ("idempotency_key", "TEXT"),
