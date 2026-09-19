@@ -200,6 +200,12 @@ CREATE TABLE IF NOT EXISTS crawl_audits (
     audited_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    next_allowed_at REAL NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS checkpoints (
     id INTEGER PRIMARY KEY,
     platform TEXT NOT NULL,
@@ -217,9 +223,11 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 def connect(database_path: Path | None = None) -> sqlite3.Connection:
     path = database_path or get_settings().database_path
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, timeout=10.0)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 10000")
+    connection.execute("PRAGMA synchronous = NORMAL")
     return connection
 
 
@@ -253,6 +261,7 @@ def _ensure_column(
 
 def init_database(database_path: Path | None = None) -> None:
     with db_session(database_path) as connection:
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.executescript(SCHEMA)
         _ensure_column(
             connection,
