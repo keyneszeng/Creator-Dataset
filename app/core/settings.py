@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Conservative shared Xiaohongshu request spacing across workers.
     xhs_min_interval_seconds: float = 1.5
 
+    # PostgreSQL pool per process.
+    postgres_pool_min_size: int = 1
+    postgres_pool_max_size: int = 10
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
