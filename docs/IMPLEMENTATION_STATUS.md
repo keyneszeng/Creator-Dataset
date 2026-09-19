@@ -95,7 +95,7 @@ POST /api/creators/{creator_id}/enrich-posts
 - [x] SSRF-oriented URL validation
 - [x] automatic download → OCR pipeline
 - [x] OCR-aware post export
-- [ ] creator-level bulk media orchestration
+- [x] creator-level bulk media orchestration
 
 ### OCR
 
@@ -188,3 +188,45 @@ analysis.jsonl
 ```
 
 See [ANALYSIS_CORPUS.md](ANALYSIS_CORPUS.md).
+
+
+## STT
+
+- [x] pluggable SttEngine protocol
+- [x] faster-whisper provider
+- [x] CPU INT8 default
+- [x] timestamped transcript segments
+- [x] language detection
+- [x] transcripts persistence
+- [x] standalone transcription API
+- [x] automatic media pipeline integration
+- [x] video_transcript analysis units
+- [x] transcript-aware Markdown export
+
+Endpoints:
+
+```text
+POST /api/posts/{post_id}/transcribe-videos
+POST /api/posts/{post_id}/process-media
+```
+
+See [STT.md](STT.md).
+
+## Creator Pipeline
+
+- [x] persistent creator pipeline Job
+- [x] per-Post child Jobs
+- [x] bounded max_posts execution
+- [x] Post Detail enrichment
+- [x] Comments
+- [x] Media download
+- [x] OCR
+- [x] STT
+- [x] Export
+- [x] PARTIAL status when individual Posts fail
+
+Endpoint:
+
+```text
+POST /api/creators/{creator_id}/run-pipeline
+```
