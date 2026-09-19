@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 Migration = Callable[[sqlite3.Connection], None]
 
@@ -190,12 +190,32 @@ def migration_005_saas_access(connection: sqlite3.Connection) -> None:
     """)
 
 
+def migration_006_dataset_artifacts(connection: sqlite3.Connection) -> None:
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS dataset_artifacts (
+            id INTEGER PRIMARY KEY,
+            platform TEXT NOT NULL,
+            post_id TEXT NOT NULL,
+            dataset_schema_version TEXT NOT NULL,
+            storage_backend TEXT NOT NULL,
+            export_prefix TEXT NOT NULL,
+            artifacts_json TEXT NOT NULL,
+            generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(platform, post_id, dataset_schema_version)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dataset_artifacts_post
+        ON dataset_artifacts(platform, post_id, generated_at);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_post_detail_context),
     (2, migration_002_incremental_refresh),
     (3, migration_003_durable_jobs),
     (4, migration_004_media_storage),
     (5, migration_005_saas_access),
+    (6, migration_006_dataset_artifacts),
 ]
 
 
