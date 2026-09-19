@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
-from app.core.repositories import JobRepository, PostRepository
+from typing import Any
+
+from app.repositories.factory import create_job_repository, create_post_repository
 from app.services.comment_crawl import CommentCrawlService
 from app.services.export import ExportService
 from app.services.media_pipeline import MediaPipelineService
@@ -20,15 +22,15 @@ class CreatorPipelineService:
     def __init__(
         self,
         *,
-        posts: PostRepository | None = None,
-        jobs: JobRepository | None = None,
+        posts: Any | None = None,
+        jobs: Any | None = None,
         detail_service: PostDetailService | None = None,
         comment_service: CommentCrawlService | None = None,
         media_service: MediaPipelineService | None = None,
         export_service: ExportService | None = None,
     ) -> None:
-        self.posts = posts or PostRepository()
-        self.jobs = jobs or JobRepository()
+        self.posts = posts or create_post_repository()
+        self.jobs = jobs or create_job_repository()
         self.detail_service = detail_service or PostDetailService()
         self.comment_service = comment_service or CommentCrawlService()
         self.media_service = media_service or MediaPipelineService()
