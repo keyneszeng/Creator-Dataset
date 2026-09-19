@@ -139,6 +139,8 @@ pytest
 - [Analysis Corpus](docs/ANALYSIS_CORPUS.md)
 - [Reliability Architecture](docs/RELIABILITY_ARCHITECTURE.md)
 - [Stage Jobs](docs/STAGE_JOBS.md)
+- [Incremental Refresh](docs/INCREMENTAL_REFRESH.md)
+- [Refresh Scheduler](docs/SCHEDULER.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
@@ -262,3 +264,49 @@ POST /api/jobs/{job_id}/repair
 ```
 
 Repair 只重开目标 Stage 及其下游依赖，不会重复执行已经完成且无依赖关系的阶段。
+
+
+## 长期运行进程
+
+生产建议运行三个独立进程：
+
+```text
+API
+├── 接收导入/入队/查询请求
+│
+Worker(s)
+├── Claim durable Stage Jobs
+├── Lease / Heartbeat
+├── Retry / Repair
+│
+Scheduler
+└── 按 refresh_schedules 周期创建 CREATOR_REFRESH
+```
+
+启动：
+
+```bash
+uvicorn app.main:app
+creator-dataset-worker
+creator-dataset-scheduler
+```
+
+增量刷新：
+
+```text
+POST /api/creators/{creator_id}/enqueue-refresh
+PUT  /api/creators/{creator_id}/refresh-schedule
+GET  /api/creators/{creator_id}/refresh-history
+GET  /api/creators/{creator_id}/changes
+```
+
+Refresh 会区分：
+
+```text
+content_changed
+media_changed
+engagement_changed
+comments_changed
+```
+
+并只 fan-out 需要的 Stage Jobs。评论变化会主动失效旧评论 checkpoint；媒体变化会通过 `is_active` 对当前媒体版本进行 reconciliation。
