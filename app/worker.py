@@ -3,7 +3,7 @@ import logging
 import socket
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from app.core.errors import (
