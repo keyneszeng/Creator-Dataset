@@ -18,6 +18,7 @@ from app.core.repositories import JobRepository, WorkerRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
 from app.services.export import ExportService
+from app.services.incremental_refresh import IncrementalRefreshService
 from app.services.media import MediaDownloadService
 from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
@@ -49,6 +50,7 @@ class DurableWorker:
         self.heartbeat_seconds = settings.worker_heartbeat_seconds
         self.poll_seconds = settings.worker_poll_seconds
         self.handlers = handlers or {
+            "CREATOR_DISCOVERY": self._handle_creator_discovery,
             "POST_DETAIL": self._handle_post_detail,
             "COMMENTS": self._handle_comments,
             "MEDIA_DOWNLOAD": self._handle_media_download,
@@ -57,6 +59,21 @@ class DurableWorker:
             "VALIDATION": self._handle_validation,
             "EXPORT": self._handle_export,
         }
+
+    async def _handle_creator_discovery(self, job: dict[str, Any]) -> None:
+        payload = job.get("payload") or {}
+        parent_job_id = job.get("parent_job_id")
+        if not parent_job_id:
+            raise ValueError("Incremental discovery requires a CREATOR_REFRESH parent job.")
+        await IncrementalRefreshService().run(
+            creator_id=str(job["creator_id"]),
+            parent_job_id=int(parent_job_id),
+            max_pages=int(payload.get("max_pages") or 3),
+            max_recent_posts=int(payload.get("max_recent_posts") or 30),
+            stop_after_unchanged_pages=int(
+                payload.get("stop_after_unchanged_pages") or 2
+            ),
+        )
 
     async def _handle_post_detail(self, job: dict[str, Any]) -> None:
         await PostDetailService().enrich_post(str(job["post_id"]))
