@@ -224,3 +224,34 @@ Knowledge Layer：
 8. queue-age / BLOCKED / disk-space alerts
 9. retention policy for raw snapshots and Job history
 10. Creator-level export bundle + manifest
+
+
+## Deployment Track
+
+### Implemented
+
+- Local-first deployment profile
+- single-node cloud deployment profile
+- local filesystem object store
+- S3-compatible object store
+- media storage references independent of local paths
+- OCR/STT object materialization
+- Docker image
+- local Docker Compose
+- cloud single-node Compose
+- schema migration versioning
+- readiness/capability endpoints
+- transactional SQLite backup CLI
+
+### Next — Multi-node Cloud
+
+1. introduce database repository interfaces by bounded domain
+2. implement Postgres connection/transaction layer
+3. port durable Job claim to Postgres `FOR UPDATE SKIP LOCKED`
+4. migrate Creator/Post/Comment/Media repositories
+5. migrate scheduler/rate-limit state
+6. add Postgres migration tooling
+7. run SQLite/Postgres contract tests
+8. enable stateless API replicas
+9. enable multi-host Workers
+10. add Kubernetes / ECS / Cloud Run deployment templates
