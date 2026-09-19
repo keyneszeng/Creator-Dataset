@@ -8,6 +8,7 @@ from app.core.database import init_database
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.postgres.database import init_postgres_database
+from app.postgres.pool import close_postgres_pools
 
 
 @asynccontextmanager
@@ -21,7 +22,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     else:
         init_postgres_database(str(settings.database_url))
 
-    yield
+    try:
+        yield
+    finally:
+        if database_backend == "postgres":
+            close_postgres_pools()
 
 
 app = FastAPI(
