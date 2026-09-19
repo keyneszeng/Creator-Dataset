@@ -916,6 +916,17 @@ class JobRepository:
         summary["TOTAL"] = sum(summary.values())
         return summary
 
+    def queue_summary(self) -> dict[str, int]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT status, COUNT(*) AS count
+                FROM jobs
+                GROUP BY status
+            """).fetchall()
+        summary = {str(row["status"]): int(row["count"]) for row in rows}
+        summary["TOTAL"] = sum(summary.values())
+        return summary
+
     def list_children(
         self,
         *,
@@ -936,3 +947,47 @@ class JobRepository:
             item["payload"] = json.loads(item.get("payload_json") or "{}")
             result.append(item)
         return result
+
+
+
+class WorkerRepository:
+    def touch(
+        self,
+        *,
+        worker_id: str,
+        current_job_id: int | None = None,
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO workers (
+                    worker_id, current_job_id, heartbeat_at
+                ) VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(worker_id) DO UPDATE SET
+                    current_job_id=excluded.current_job_id,
+                    heartbeat_at=CURRENT_TIMESTAMP
+            """, (worker_id, current_job_id))
+
+    def clear_job(self, *, worker_id: str) -> None:
+        self.touch(worker_id=worker_id, current_job_id=None)
+
+    def active(
+        self,
+        *,
+        stale_after_seconds: int = 180,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT worker_id, current_job_id, started_at, heartbeat_at
+                FROM workers
+                WHERE heartbeat_at >= datetime('now', ?)
+                ORDER BY heartbeat_at DESC
+            """, (f"-{stale_after_seconds} seconds",)).fetchall()
+        return [dict(row) for row in rows]
+
+    def prune_stale(self, *, stale_after_seconds: int = 86400) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                DELETE FROM workers
+                WHERE heartbeat_at < datetime('now', ?)
+            """, (f"-{stale_after_seconds} seconds",))
+        return int(cursor.rowcount)
