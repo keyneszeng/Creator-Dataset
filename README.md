@@ -84,12 +84,21 @@ pip install -e ".[dev,xhs,ocr,stt]"
 uvicorn app.main:app --reload
 ```
 
-服务启动后：
+服务启动后，另开一个终端启动 Durable Worker：
+
+```bash
+creator-dataset-worker
+```
+
+关键接口：
 
 ```text
 GET  /api/health
+GET  /api/system/status
 POST /api/creators/resolve
 POST /api/creators/import
+POST /api/creators/{creator_id}/enqueue-pipeline
+GET  /api/jobs/{job_id}/progress
 ```
 
 配置小红书登录态：
@@ -128,13 +137,16 @@ pytest
 - [Media Pipeline](docs/MEDIA_PIPELINE.md)
 - [Video STT](docs/STT.md)
 - [Analysis Corpus](docs/ANALYSIS_CORPUS.md)
+- [Reliability Architecture](docs/RELIABILITY_ARCHITECTURE.md)
+- [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
 
 - Python 3.12
 - FastAPI
 - SQLite
-- asyncio queue（早期）/ Redis + RQ、Dramatiq 或 Celery（规模化后）
+- SQLite durable queue + Worker lease（V0.x 单机阶段）
+- Postgres / distributed queue（多机阶段）
 - Next.js（管理 UI，可后置）
 - 本地文件系统（V0.1 Media Storage）
 
@@ -186,8 +198,35 @@ JSON / JSONL / Markdown Dataset
 ```text
 POST /api/creators/import
 POST /api/creators/{creator_id}/enrich-posts
-POST /api/creators/{creator_id}/run-pipeline
+POST /api/creators/{creator_id}/enqueue-pipeline
+GET  /api/jobs/{job_id}/progress
+POST /api/creators/{creator_id}/run-pipeline   # 仅建议本地调试
 POST /api/posts/{post_id}/crawl-comments
 POST /api/posts/{post_id}/process-media
 POST /api/posts/{post_id}/export
 ```
+
+
+## 长期运行模式
+
+生产默认不要用同步 `run-pipeline` 长时间占用 HTTP 请求。
+
+推荐：
+
+```text
+API enqueue
+   ↓
+SQLite durable queue
+   ↓
+Worker claim + lease
+   ↓
+heartbeat
+   ↓
+Post Pipeline
+   ↓
+retry / resume / parent reconciliation
+```
+
+当前 V0.x 针对单机运行优化：SQLite WAL、busy timeout、共享限速、Worker lease、指数退避和 Raw API Snapshot 已实现。
+
+当进入多机 Worker、多租户或高并发写入阶段，再迁移到 Postgres + Object Storage；上层 API、PlatformAdapter 和 Dataset Schema 尽量保持不变。
