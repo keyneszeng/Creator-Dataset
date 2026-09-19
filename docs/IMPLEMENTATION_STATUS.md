@@ -93,16 +93,31 @@ POST /api/creators/{creator_id}/enrich-posts
 
 ### Milestone 5/6 — Comments
 
-- [ ] root comment cursor pagination
-- [ ] sub-comment cursor pagination
-- [ ] root_comment_id
-- [ ] parent_comment_id
+- [x] root comment cursor pagination
+- [x] sub-comment cursor pagination
+- [x] root_comment_id
+- [x] parent_comment_id
 - [ ] comment media
-- [ ] thread completion tracking
+- [x] per-thread checkpoint
+- [x] thread completion tracking
+- [x] resumable root pagination
+- [x] resumable reply pagination
+
+Endpoint:
+
+```text
+POST /api/posts/{post_id}/crawl-comments
+```
 
 ### Milestone 8 — Audit
 
-- [ ] reported vs fetched
-- [ ] failed thread count
-- [ ] completeness ratio
-- [ ] COMPLETE / PARTIAL decision
+- [x] reported vs fetched
+- [x] failed thread count
+- [x] completeness ratio
+- [x] COMPLETE / PARTIAL decision
+- [x] pagination completion state
+
+
+## Comment Crawling Documentation
+
+See [COMMENT_CRAWLING.md](COMMENT_CRAWLING.md) for pagination, checkpoints and audit semantics.
