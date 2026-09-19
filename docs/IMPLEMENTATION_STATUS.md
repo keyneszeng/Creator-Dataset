@@ -84,13 +84,18 @@ POST /api/creators/{creator_id}/enrich-posts
 
 ### Milestone 4 — Media
 
-- [ ] post images download
-- [ ] video download
-- [ ] cover download
+- [x] post image URLs extracted from detail
+- [x] video URLs extracted from detail
+- [x] cover URLs extracted from detail
 - [x] comment image URLs registered in media table
-- [ ] media manifest
-- [ ] SHA256
-- [ ] retry
+- [x] streamed media download
+- [x] atomic file write
+- [x] SHA256
+- [x] retry FAILED media on later runs
+- [x] SSRF-oriented URL validation
+- [x] automatic download → OCR pipeline
+- [x] OCR-aware post export
+- [ ] creator-level bulk media orchestration
 
 ### OCR
 
@@ -139,3 +144,27 @@ POST /api/posts/{post_id}/crawl-comments
 ## Comment Crawling Documentation
 
 See [COMMENT_CRAWLING.md](COMMENT_CRAWLING.md) for pagination, checkpoints and audit semantics.
+
+
+## Media / OCR / Export Runtime Flow
+
+```text
+Post Detail
+   ↓
+register media
+   ↓
+POST /api/posts/{post_id}/process-media
+   ↓
+download + SHA256
+   ↓
+OCR images
+   ↓
+POST /api/posts/{post_id}/export
+   ↓
+post.json
+comments.jsonl
+media.jsonl
+knowledge.md
+```
+
+See [MEDIA_PIPELINE.md](MEDIA_PIPELINE.md) and [OCR.md](OCR.md).
