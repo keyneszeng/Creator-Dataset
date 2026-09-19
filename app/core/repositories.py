@@ -606,6 +606,49 @@ class TextUnitRepository:
 
 
 class JobRepository:
+    def enqueue(
+        self,
+        *,
+        job_type: str,
+        platform: str | None = None,
+        creator_id: str | None = None,
+        post_id: str | None = None,
+        comment_id: str | None = None,
+        parent_job_id: int | None = None,
+        idempotency_key: str | None = None,
+        payload: dict[str, Any] | None = None,
+        priority: int = 100,
+        max_attempts: int = 5,
+    ) -> int:
+        with db_session() as connection:
+            if idempotency_key:
+                row = connection.execute(
+                    "SELECT id FROM jobs WHERE idempotency_key=?",
+                    (idempotency_key,),
+                ).fetchone()
+                if row:
+                    return int(row["id"])
+
+            cursor = connection.execute("""
+                INSERT INTO jobs (
+                    parent_job_id, idempotency_key, job_type, platform,
+                    creator_id, post_id, comment_id, payload_json, status,
+                    priority, max_attempts
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+            """, (
+                parent_job_id,
+                idempotency_key,
+                job_type,
+                platform,
+                creator_id,
+                post_id,
+                comment_id,
+                json.dumps(payload or {}, ensure_ascii=False),
+                priority,
+                max_attempts,
+            ))
+            return int(cursor.lastrowid)
+
     def create(
         self,
         *,
@@ -615,19 +658,149 @@ class JobRepository:
         post_id: str | None = None,
         comment_id: str | None = None,
     ) -> int:
+        return self.enqueue(
+            job_type=job_type,
+            platform=platform,
+            creator_id=creator_id,
+            post_id=post_id,
+            comment_id=comment_id,
+        )
+
+    def claim_next(
+        self,
+        *,
+        worker_id: str,
+        lease_seconds: int = 120,
+    ) -> dict[str, Any] | None:
+        with db_session() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("""
+                SELECT *
+                FROM jobs
+                WHERE status IN ('PENDING', 'RETRY')
+                  AND (next_retry_at IS NULL OR next_retry_at <= CURRENT_TIMESTAMP)
+                  AND attempt < max_attempts
+                ORDER BY priority ASC, created_at ASC, id ASC
+                LIMIT 1
+            """).fetchone()
+
+            if row is None:
+                return None
+
+            job_id = int(row["id"])
+            connection.execute("""
+                UPDATE jobs
+                SET status='RUNNING',
+                    attempt=attempt + 1,
+                    retry_count=retry_count + CASE WHEN status='RETRY' THEN 1 ELSE 0 END,
+                    lease_owner=?,
+                    lease_expires_at=datetime('now', ?),
+                    heartbeat_at=CURRENT_TIMESTAMP,
+                    started_at=COALESCE(started_at, CURRENT_TIMESTAMP),
+                    last_error=NULL
+                WHERE id=?
+            """, (worker_id, f"+{lease_seconds} seconds", job_id))
+
+            claimed = connection.execute(
+                "SELECT * FROM jobs WHERE id=?",
+                (job_id,),
+            ).fetchone()
+
+        result = dict(claimed)
+        result["payload"] = json.loads(result.get("payload_json") or "{}")
+        return result
+
+    def heartbeat(
+        self,
+        *,
+        job_id: int,
+        worker_id: str,
+        lease_seconds: int = 120,
+    ) -> bool:
         with db_session() as connection:
             cursor = connection.execute("""
-                INSERT INTO jobs (
-                    job_type, platform, creator_id, post_id, comment_id, status
-                ) VALUES (?, ?, ?, ?, ?, 'PENDING')
-            """, (job_type, platform, creator_id, post_id, comment_id))
-            return int(cursor.lastrowid)
+                UPDATE jobs
+                SET heartbeat_at=CURRENT_TIMESTAMP,
+                    lease_expires_at=datetime('now', ?)
+                WHERE id=? AND status='RUNNING' AND lease_owner=?
+            """, (f"+{lease_seconds} seconds", job_id, worker_id))
+        return cursor.rowcount == 1
+
+    def recover_expired_leases(self) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                UPDATE jobs
+                SET status=CASE
+                        WHEN attempt >= max_attempts THEN 'FAILED'
+                        ELSE 'RETRY'
+                    END,
+                    last_error=CASE
+                        WHEN attempt >= max_attempts
+                        THEN COALESCE(last_error, 'Worker lease expired; max attempts reached.')
+                        ELSE COALESCE(last_error, 'Worker lease expired; queued for retry.')
+                    END,
+                    next_retry_at=CASE
+                        WHEN attempt >= max_attempts THEN NULL
+                        ELSE CURRENT_TIMESTAMP
+                    END,
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL,
+                    completed_at=CASE
+                        WHEN attempt >= max_attempts THEN CURRENT_TIMESTAMP
+                        ELSE NULL
+                    END
+                WHERE status='RUNNING'
+                  AND lease_expires_at IS NOT NULL
+                  AND lease_expires_at < CURRENT_TIMESTAMP
+            """)
+        return int(cursor.rowcount)
+
+    def schedule_retry(
+        self,
+        *,
+        job_id: int,
+        error: str,
+        next_retry_at: str,
+    ) -> None:
+        with db_session() as connection:
+            row = connection.execute(
+                "SELECT attempt, max_attempts FROM jobs WHERE id=?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return
+            terminal = int(row["attempt"] or 0) >= int(row["max_attempts"] or 0)
+            connection.execute("""
+                UPDATE jobs
+                SET status=?,
+                    last_error=?,
+                    next_retry_at=?,
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL,
+                    completed_at=?
+                WHERE id=?
+            """, (
+                "FAILED" if terminal else "RETRY",
+                error,
+                None if terminal else next_retry_at,
+                "CURRENT_TIMESTAMP" if terminal else None,
+                job_id,
+            ))
+            if terminal:
+                connection.execute(
+                    "UPDATE jobs SET completed_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (job_id,),
+                )
 
     def mark_running(self, *, job_id: int) -> None:
         with db_session() as connection:
             connection.execute("""
                 UPDATE jobs
-                SET status='RUNNING', started_at=CURRENT_TIMESTAMP, last_error=NULL
+                SET status='RUNNING',
+                    started_at=COALESCE(started_at, CURRENT_TIMESTAMP),
+                    last_error=NULL
                 WHERE id=?
             """, (job_id,))
 
@@ -635,7 +808,12 @@ class JobRepository:
         with db_session() as connection:
             connection.execute("""
                 UPDATE jobs
-                SET status='COMPLETE', completed_at=CURRENT_TIMESTAMP
+                SET status='COMPLETE',
+                    completed_at=CURRENT_TIMESTAMP,
+                    next_retry_at=NULL,
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL
                 WHERE id=?
             """, (job_id,))
 
@@ -649,7 +827,13 @@ class JobRepository:
         with db_session() as connection:
             connection.execute("""
                 UPDATE jobs
-                SET status=?, last_error=?, completed_at=CURRENT_TIMESTAMP
+                SET status=?,
+                    last_error=?,
+                    completed_at=CURRENT_TIMESTAMP,
+                    next_retry_at=NULL,
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL
                 WHERE id=?
             """, (status, error, job_id))
 
@@ -659,4 +843,41 @@ class JobRepository:
                 "SELECT * FROM jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        result = dict(row)
+        result["payload"] = json.loads(result.get("payload_json") or "{}")
+        return result
+
+    def children_summary(self, *, parent_job_id: int) -> dict[str, int]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT status, COUNT(*) AS count
+                FROM jobs
+                WHERE parent_job_id=?
+                GROUP BY status
+            """, (parent_job_id,)).fetchall()
+        summary = {str(row["status"]): int(row["count"]) for row in rows}
+        summary["TOTAL"] = sum(summary.values())
+        return summary
+
+    def list_children(
+        self,
+        *,
+        parent_job_id: int,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT *
+                FROM jobs
+                WHERE parent_job_id=?
+                ORDER BY id ASC
+                LIMIT ?
+            """, (parent_job_id, limit)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.get("payload_json") or "{}")
+            result.append(item)
+        return result
