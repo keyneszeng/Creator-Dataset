@@ -1,6 +1,7 @@
 import time
 from typing import Any
 
+from app.postgres.database import connect_postgres
 from app.postgres.jobs import PostgresJobRepository
 
 
@@ -127,7 +128,7 @@ class PostgresSchedulerLock:
         if self._connection is not None:
             return True
 
-        connection = self.jobs._connect()
+        connection = connect_postgres(self.jobs.database_url)
         cursor = connection.cursor()
         try:
             cursor.execute(
