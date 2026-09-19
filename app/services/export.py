@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.core.repositories import ExportRepository, TextUnitRepository
+from app.repositories.factory import create_export_repository, create_text_unit_repository
 from app.core.settings import get_settings
 from app.core.versioning import DATASET_SCHEMA_VERSION, PIPELINE_API_VERSION
 from app.services.analysis_corpus import AnalysisCorpusService
@@ -22,11 +22,11 @@ def _loads(value: Any) -> Any:
 class ExportService:
     def __init__(
         self,
-        repository: ExportRepository | None = None,
-        text_units: TextUnitRepository | None = None,
+        repository: Any | None = None,
+        text_units: Any | None = None,
     ) -> None:
-        self.repository = repository or ExportRepository()
-        self.text_units = text_units or TextUnitRepository()
+        self.repository = repository or create_export_repository()
+        self.text_units = text_units or create_text_unit_repository()
 
     def export_post(self, post_id: str) -> dict[str, str]:
         bundle = self.repository.get_post_bundle(post_id=post_id)
