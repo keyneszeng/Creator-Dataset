@@ -779,20 +779,18 @@ class JobRepository:
                     lease_owner=NULL,
                     lease_expires_at=NULL,
                     heartbeat_at=NULL,
-                    completed_at=?
+                    completed_at=CASE
+                        WHEN ? THEN CURRENT_TIMESTAMP
+                        ELSE NULL
+                    END
                 WHERE id=?
             """, (
                 "FAILED" if terminal else "RETRY",
                 error,
                 None if terminal else next_retry_at,
-                "CURRENT_TIMESTAMP" if terminal else None,
+                int(terminal),
                 job_id,
             ))
-            if terminal:
-                connection.execute(
-                    "UPDATE jobs SET completed_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (job_id,),
-                )
 
     def mark_running(self, *, job_id: int) -> None:
         with db_session() as connection:
@@ -875,6 +873,22 @@ class JobRepository:
                     heartbeat_at=NULL
                 WHERE id=?
             """, (status, error, job_id))
+
+    def get_by_idempotency_key(
+        self,
+        *,
+        idempotency_key: str,
+    ) -> dict[str, Any] | None:
+        with db_session() as connection:
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["payload"] = json.loads(result.get("payload_json") or "{}")
+        return result
 
     def get(self, *, job_id: int) -> dict[str, Any] | None:
         with db_session() as connection:
