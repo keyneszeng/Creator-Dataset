@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import asdict
-from app.core.repositories import MediaRepository, TranscriptRepository
+from typing import Any
+
+from app.repositories.factory import create_media_repository, create_transcript_repository
 from app.stt.base import SttEngine
 from app.stt.factory import create_stt_engine
 from app.storage.materialize import materialize_media
@@ -10,12 +12,12 @@ class SttService:
     def __init__(
         self,
         *,
-        media_repository: MediaRepository | None = None,
-        transcript_repository: TranscriptRepository | None = None,
+        media_repository: Any | None = None,
+        transcript_repository: Any | None = None,
         engine: SttEngine | None = None,
     ) -> None:
-        self.media = media_repository or MediaRepository()
-        self.transcripts = transcript_repository or TranscriptRepository()
+        self.media = media_repository or create_media_repository()
+        self.transcripts = transcript_repository or create_transcript_repository()
         self.engine = engine or create_stt_engine()
 
     async def process_post_videos(
