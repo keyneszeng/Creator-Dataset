@@ -8,7 +8,12 @@ from app.core.errors import (
     PlatformBlocked,
     PlatformRequestError,
 )
-from app.core.repositories import AuditRepository, CommentRepository, PostRepository
+from app.core.repositories import (
+    AuditRepository,
+    CommentRepository,
+    PostRepository,
+    RawSnapshotRepository,
+)
 from app.platforms.xiaohongshu.comments import normalize_comment_page
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 
@@ -31,12 +36,14 @@ class CommentCrawlService:
         posts: PostRepository | None = None,
         checkpoints: CheckpointRepository | None = None,
         audits: AuditRepository | None = None,
+        raw_snapshots: RawSnapshotRepository | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
         self.comments = comments or CommentRepository()
         self.posts = posts or PostRepository()
         self.checkpoints = checkpoints or CheckpointRepository()
         self.audits = audits or AuditRepository()
+        self.raw_snapshots = raw_snapshots or RawSnapshotRepository()
 
     async def crawl_post(
         self,
@@ -72,6 +79,13 @@ class CommentCrawlService:
                 root_cursor,
                 xsec_token,
                 xsec_source,
+            )
+            self.raw_snapshots.save(
+                platform="xiaohongshu",
+                resource_type="root_comments_page",
+                object_id=post_id,
+                cursor=root_cursor or None,
+                payload=raw_page,
             )
             page = normalize_comment_page(raw_page, post_id=post_id)
 
@@ -118,6 +132,13 @@ class CommentCrawlService:
                         post_id,
                         root_id,
                         cursor,
+                    )
+                    self.raw_snapshots.save(
+                        platform="xiaohongshu",
+                        resource_type="sub_comments_page",
+                        object_id=f"{post_id}:{root_id}",
+                        cursor=cursor or None,
+                        payload=raw_page,
                     )
                     page = normalize_comment_page(
                         raw_page,
