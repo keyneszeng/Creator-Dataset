@@ -262,6 +262,43 @@ class PostRepository:
             """, (platform, creator_id, limit)).fetchall()
         return [dict(row) for row in rows]
 
+    def list_catalog(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT
+                    post_id,
+                    source_url,
+                    title,
+                    post_type,
+                    published_at,
+                    like_count,
+                    favorite_count,
+                    share_count,
+                    reported_comment_count,
+                    comment_status,
+                    detail_raw_json IS NOT NULL AS has_detail
+                FROM posts
+                WHERE platform=? AND creator_id=?
+                ORDER BY
+                    CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,
+                    published_at DESC,
+                    id DESC
+                LIMIT ? OFFSET ?
+            """, (
+                platform,
+                creator_id,
+                limit,
+                offset,
+            )).fetchall()
+        return [dict(row) for row in rows]
+
     def count_for_creator(self, *, platform: str, creator_id: str) -> int:
         with db_session() as connection:
             row = connection.execute("""
