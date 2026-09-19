@@ -182,6 +182,18 @@ ON jobs(status, next_retry_at, priority, created_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_parent
 ON jobs(parent_job_id, status);
 
+CREATE TABLE IF NOT EXISTS job_dependencies (
+    job_id INTEGER NOT NULL,
+    depends_on_job_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(job_id, depends_on_job_id),
+    FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY(depends_on_job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_dependencies_target
+ON job_dependencies(depends_on_job_id, job_id);
+
 CREATE TABLE IF NOT EXISTS crawl_audits (
     id INTEGER PRIMARY KEY,
     post_id TEXT NOT NULL,
@@ -329,4 +341,18 @@ def init_database(database_path: Path | None = None) -> None:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_jobs_parent "
             "ON jobs(parent_job_id, status)"
+        )
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS job_dependencies (
+                job_id INTEGER NOT NULL,
+                depends_on_job_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(job_id, depends_on_job_id),
+                FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+                FOREIGN KEY(depends_on_job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            )
+        """)
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_job_dependencies_target "
+            "ON job_dependencies(depends_on_job_id, job_id)"
         )
