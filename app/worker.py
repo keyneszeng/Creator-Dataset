@@ -18,6 +18,7 @@ from app.repositories.factory import create_job_repository, create_worker_reposi
 from app.jobs.contracts import DurableJobRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
+from app.services.creator_import import CreatorImportService
 from app.services.creator_export import CreatorExportService
 from app.services.export import ExportService
 from app.services.incremental_refresh import IncrementalRefreshService
@@ -52,6 +53,7 @@ class DurableWorker:
         self.heartbeat_seconds = settings.worker_heartbeat_seconds
         self.poll_seconds = settings.worker_poll_seconds
         self.handlers = handlers or {
+            "CREATOR_IMPORT": self._handle_creator_import,
             "CREATOR_DISCOVERY": self._handle_creator_discovery,
             "CREATOR_EXPORT": self._handle_creator_export,
             "POST_DETAIL": self._handle_post_detail,
@@ -62,6 +64,16 @@ class DurableWorker:
             "VALIDATION": self._handle_validation,
             "EXPORT": self._handle_export,
         }
+
+    async def _handle_creator_import(self, job: dict[str, Any]) -> None:
+        payload = job.get("payload") or {}
+        url = str(payload.get("url") or "")
+        if not url:
+            raise ValueError("Creator import job has no URL.")
+        await CreatorImportService().import_creator(
+            url,
+            max_pages=int(payload.get("max_pages") or 20),
+        )
 
     async def _handle_creator_discovery(self, job: dict[str, Any]) -> None:
         payload = job.get("payload") or {}
