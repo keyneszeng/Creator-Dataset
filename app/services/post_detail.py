@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
-from app.core.repositories import PostRepository
+from app.core.repositories import MediaRepository, PostRepository
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 from app.platforms.xiaohongshu.normalizers import normalize_post_detail
 
@@ -11,6 +11,7 @@ class PostDetailBatchResult:
     creator_id: str
     requested: int
     enriched: int
+    media_registered: int
 
 
 class PostDetailService:
@@ -18,9 +19,11 @@ class PostDetailService:
         self,
         gateway: XiaohongshuGateway | None = None,
         post_repository: PostRepository | None = None,
+        media_repository: MediaRepository | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
         self.posts = post_repository or PostRepository()
+        self.media = media_repository or MediaRepository()
 
     async def enrich_creator(
         self,
@@ -37,6 +40,8 @@ class PostDetailService:
         )
 
         enriched = 0
+        media_registered = 0
+
         for row in rows:
             context = row["platform_context"]
             raw = await asyncio.to_thread(
@@ -59,10 +64,22 @@ class PostDetailService:
                 reported_comment_count=post["reported_comment_count"],
                 raw=raw,
             )
+
+            for media in post["media"]:
+                self.media.upsert(
+                    platform="xiaohongshu",
+                    post_id=row["post_id"],
+                    comment_id=None,
+                    media_type=media["media_type"],
+                    remote_url=media["remote_url"],
+                )
+                media_registered += 1
+
             enriched += 1
 
         return PostDetailBatchResult(
             creator_id=creator_id,
             requested=len(rows),
             enriched=enriched,
+            media_registered=media_registered,
         )
