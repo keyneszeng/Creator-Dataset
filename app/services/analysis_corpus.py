@@ -40,26 +40,44 @@ class AnalysisCorpusService:
 
         for item in media:
             ocr_text = str(item.get("ocr_text") or "").strip()
-            if not ocr_text:
-                continue
-            comment_id = item.get("comment_id")
-            unit_type = (
-                "comment_image_ocr"
-                if comment_id
-                else "image_ocr"
-            )
-            self.text_units.upsert(
-                source_key=f"media:{item['id']}:ocr:{item.get('ocr_engine') or 'unknown'}",
-                platform=str(item["platform"]),
-                post_id=post_id,
-                comment_id=str(comment_id) if comment_id else None,
-                media_id=int(item["id"]),
-                unit_type=unit_type,
-                text=ocr_text,
-                confidence=item.get("ocr_confidence"),
-                provenance="ocr",
-            )
-            created += 1
+            if ocr_text:
+                comment_id = item.get("comment_id")
+                unit_type = (
+                    "comment_image_ocr"
+                    if comment_id
+                    else "image_ocr"
+                )
+                self.text_units.upsert(
+                    source_key=f"media:{item['id']}:ocr:{item.get('ocr_engine') or 'unknown'}",
+                    platform=str(item["platform"]),
+                    post_id=post_id,
+                    comment_id=str(comment_id) if comment_id else None,
+                    media_id=int(item["id"]),
+                    unit_type=unit_type,
+                    text=ocr_text,
+                    confidence=item.get("ocr_confidence"),
+                    provenance="ocr",
+                )
+                created += 1
+
+            transcript_text = str(item.get("transcript_text") or "").strip()
+            if transcript_text:
+                self.text_units.upsert(
+                    source_key=(
+                        f"media:{item['id']}:stt:"
+                        f"{item.get('transcript_engine') or 'unknown'}:"
+                        f"{item.get('transcript_model') or 'unknown'}"
+                    ),
+                    platform=str(item["platform"]),
+                    post_id=post_id,
+                    comment_id=None,
+                    media_id=int(item["id"]),
+                    unit_type="video_transcript",
+                    text=transcript_text,
+                    confidence=item.get("transcript_language_probability"),
+                    provenance="stt",
+                )
+                created += 1
 
         for comment in comments:
             text = str(comment.get("content") or "").strip()
