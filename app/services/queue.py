@@ -9,6 +9,14 @@ from app.repositories.factory import (
     create_post_repository,
 )
 from app.core.versioning import DATASET_SCHEMA_VERSION
+from app.platforms.xiaohongshu.resolver import resolve_creator_url
+
+
+@dataclass(frozen=True, slots=True)
+class EnqueueCreatorImportResult:
+    creator_id: str
+    canonical_url: str
+    job_id: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +165,35 @@ class QueueService:
                 depends_on=[validation_job],
             )
         return post_job_id
+
+    def enqueue_creator_import(
+        self,
+        url: str,
+        *,
+        max_pages: int = 20,
+    ) -> EnqueueCreatorImportResult:
+        resolved = resolve_creator_url(url)
+        creator_id = resolved.creator_id
+        key = f"creator-import:xiaohongshu:{creator_id}"
+
+        job_id = self.jobs.enqueue(
+            job_type="CREATOR_IMPORT",
+            platform="xiaohongshu",
+            creator_id=creator_id,
+            idempotency_key=key,
+            payload={
+                "url": resolved.canonical_url,
+                "max_pages": max_pages,
+            },
+            priority=70,
+            max_attempts=5,
+        )
+
+        return EnqueueCreatorImportResult(
+            creator_id=creator_id,
+            canonical_url=resolved.canonical_url,
+            job_id=job_id,
+        )
 
     def enqueue_dataset_generation(
         self,
