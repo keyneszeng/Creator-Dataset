@@ -2,6 +2,7 @@ import sys
 
 from mcp.server import MCPServer
 
+from app.agent.identity import resolve_mcp_principal
 from app.agent.service import AgentService
 from app.core.database import init_database
 from app.core.settings import get_settings
@@ -20,7 +21,7 @@ mcp = MCPServer(
 
 
 def _service() -> AgentService:
-    return AgentService()
+    return AgentService(principal=resolve_mcp_principal())
 
 
 @mcp.tool()
