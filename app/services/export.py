@@ -1,13 +1,15 @@
 import hashlib
 import json
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.repositories.factory import create_export_repository, create_text_unit_repository
-from app.core.settings import get_settings
 from app.core.versioning import DATASET_SCHEMA_VERSION, PIPELINE_API_VERSION
 from app.services.analysis_corpus import AnalysisCorpusService
+from app.storage.base import ObjectStore, StoredObject
+from app.storage.factory import create_object_store
 
 
 def _loads(value: Any) -> Any:
@@ -24,9 +26,11 @@ class ExportService:
         self,
         repository: Any | None = None,
         text_units: Any | None = None,
+        object_store: ObjectStore | None = None,
     ) -> None:
         self.repository = repository or create_export_repository()
         self.text_units = text_units or create_text_unit_repository()
+        self.object_store = object_store or create_object_store()
 
     def export_post(self, post_id: str) -> dict[str, str]:
         bundle = self.repository.get_post_bundle(post_id=post_id)
@@ -38,92 +42,115 @@ class ExportService:
             text_units=self.text_units,
         ).rebuild_post(post_id)
 
-        settings = get_settings()
-        export_dir = (
-            settings.data_dir
-            / "xiaohongshu"
-            / "posts"
-            / post_id
-            / "export"
-        )
-        export_dir.mkdir(parents=True, exist_ok=True)
-
         post = self._normalize_row(bundle["post"])
         comments = [self._normalize_row(row) for row in bundle["comments"]]
         media = [self._normalize_media(row) for row in bundle["media"]]
         text_units = self.text_units.list_for_post(post_id=post_id)
 
-        post_path = export_dir / "post.json"
-        comments_path = export_dir / "comments.jsonl"
-        media_path = export_dir / "media.jsonl"
-        analysis_path = export_dir / "analysis.jsonl"
-        markdown_path = export_dir / "knowledge.md"
-        manifest_path = export_dir / "manifest.json"
+        prefix = f"xiaohongshu/posts/{post_id}/export"
 
-        post_path.write_text(
-            json.dumps(post, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        comments_path.write_text(
-            "".join(
-                json.dumps(comment, ensure_ascii=False) + "\n"
-                for comment in comments
-            ),
-            encoding="utf-8",
-        )
-        media_path.write_text(
-            "".join(
-                json.dumps(item, ensure_ascii=False) + "\n"
-                for item in media
-            ),
-            encoding="utf-8",
-        )
-        analysis_path.write_text(
-            "".join(
-                json.dumps(item, ensure_ascii=False) + "\n"
-                for item in text_units
-            ),
-            encoding="utf-8",
-        )
-        markdown_path.write_text(
-            self._build_markdown(post, comments, media),
-            encoding="utf-8",
-        )
+        with tempfile.TemporaryDirectory(
+            prefix=f"creator-dataset-export-{post_id}-"
+        ) as temp_dir:
+            export_dir = Path(temp_dir)
 
-        files = {
-            "post.json": post_path,
-            "comments.jsonl": comments_path,
-            "media.jsonl": media_path,
-            "analysis.jsonl": analysis_path,
-            "knowledge.md": markdown_path,
-        }
-        manifest = {
-            "dataset_schema_version": DATASET_SCHEMA_VERSION,
-            "pipeline_api_version": PIPELINE_API_VERSION,
-            "platform": post.get("platform"),
-            "post_id": post_id,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "files": {
-                name: {
-                    "bytes": path.stat().st_size,
-                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                }
+            post_path = export_dir / "post.json"
+            comments_path = export_dir / "comments.jsonl"
+            media_path = export_dir / "media.jsonl"
+            analysis_path = export_dir / "analysis.jsonl"
+            markdown_path = export_dir / "knowledge.md"
+            manifest_path = export_dir / "manifest.json"
+
+            post_path.write_text(
+                json.dumps(post, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8",
+            )
+            comments_path.write_text(
+                "".join(
+                    json.dumps(comment, ensure_ascii=False, default=str) + "\n"
+                    for comment in comments
+                ),
+                encoding="utf-8",
+            )
+            media_path.write_text(
+                "".join(
+                    json.dumps(item, ensure_ascii=False, default=str) + "\n"
+                    for item in media
+                ),
+                encoding="utf-8",
+            )
+            analysis_path.write_text(
+                "".join(
+                    json.dumps(item, ensure_ascii=False, default=str) + "\n"
+                    for item in text_units
+                ),
+                encoding="utf-8",
+            )
+            markdown_path.write_text(
+                self._build_markdown(post, comments, media),
+                encoding="utf-8",
+            )
+
+            files = {
+                "post.json": post_path,
+                "comments.jsonl": comments_path,
+                "media.jsonl": media_path,
+                "analysis.jsonl": analysis_path,
+                "knowledge.md": markdown_path,
+            }
+            manifest = {
+                "dataset_schema_version": DATASET_SCHEMA_VERSION,
+                "pipeline_api_version": PIPELINE_API_VERSION,
+                "platform": post.get("platform"),
+                "post_id": post_id,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "storage_backend": self.object_store.name,
+                "export_prefix": prefix,
+                "files": {
+                    name: {
+                        "bytes": path.stat().st_size,
+                        "sha256": hashlib.sha256(
+                            path.read_bytes()
+                        ).hexdigest(),
+                        "storage_key": f"{prefix}/{name}",
+                    }
+                    for name, path in files.items()
+                },
+            }
+            manifest_path.write_text(
+                json.dumps(
+                    manifest,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=str,
+                ),
+                encoding="utf-8",
+            )
+            files["manifest.json"] = manifest_path
+
+            stored = {
+                name: self.object_store.put_file(
+                    path,
+                    key=f"{prefix}/{name}",
+                )
                 for name, path in files.items()
-            },
-        }
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+            }
 
         return {
-            "post_json": str(post_path),
-            "comments_jsonl": str(comments_path),
-            "media_jsonl": str(media_path),
-            "analysis_jsonl": str(analysis_path),
-            "knowledge_markdown": str(markdown_path),
-            "manifest_json": str(manifest_path),
+            "post_json": self._reference(stored["post.json"]),
+            "comments_jsonl": self._reference(stored["comments.jsonl"]),
+            "media_jsonl": self._reference(stored["media.jsonl"]),
+            "analysis_jsonl": self._reference(stored["analysis.jsonl"]),
+            "knowledge_markdown": self._reference(stored["knowledge.md"]),
+            "manifest_json": self._reference(stored["manifest.json"]),
+            "export_prefix": prefix,
+            "storage_backend": self.object_store.name,
         }
+
+    def _reference(self, stored: StoredObject) -> str:
+        if stored.local_path:
+            return stored.local_path
+        return f"{stored.backend}://{stored.key}"
 
     def _normalize_row(self, row: dict[str, Any]) -> dict[str, Any]:
         data = dict(row)
