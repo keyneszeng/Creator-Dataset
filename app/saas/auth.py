@@ -1,3 +1,4 @@
+import secrets
 from fastapi import Header, HTTPException
 
 from app.core.settings import get_settings
@@ -96,7 +97,10 @@ def require_admin(
         settings.saas_auth_enabled
         and settings.saas_bootstrap_admin_key
         and x_bootstrap_key
-        and x_bootstrap_key == settings.saas_bootstrap_admin_key
+        and secrets.compare_digest(
+            x_bootstrap_key,
+            settings.saas_bootstrap_admin_key,
+        )
     ):
         return Principal(
             user_id=0,
