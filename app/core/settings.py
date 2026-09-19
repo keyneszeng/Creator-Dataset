@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     worker_lease_seconds: int = 180
     worker_heartbeat_seconds: int = 45
 
+    # Conservative shared Xiaohongshu request spacing across workers.
+    xhs_min_interval_seconds: float = 1.5
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
