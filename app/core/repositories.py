@@ -744,6 +744,25 @@ class JobRepository:
             """, (f"+{lease_seconds} seconds", job_id, worker_id))
         return cursor.rowcount == 1
 
+    def resolve_failed_dependencies(self) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                UPDATE jobs
+                SET status='PARTIAL',
+                    last_error='A required dependency did not complete successfully.',
+                    completed_at=CURRENT_TIMESTAMP,
+                    next_retry_at=NULL
+                WHERE status IN ('PENDING', 'RETRY')
+                  AND EXISTS (
+                      SELECT 1
+                      FROM job_dependencies d
+                      JOIN jobs dependency ON dependency.id=d.depends_on_job_id
+                      WHERE d.job_id=jobs.id
+                        AND dependency.status IN ('FAILED', 'PARTIAL', 'BLOCKED')
+                  )
+            """)
+        return int(cursor.rowcount)
+
     def recover_expired_leases(self) -> int:
         with db_session() as connection:
             cursor = connection.execute("""
