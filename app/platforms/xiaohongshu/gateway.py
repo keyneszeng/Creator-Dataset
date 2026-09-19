@@ -41,10 +41,10 @@ class XiaohongshuGateway:
         client = XhsClient(cookies=cookies)
         return client, (IpBlockedError, NeedVerifyError, SessionExpiredError), XhsApiError
 
-    def get_creator(self, creator_id: str) -> dict[str, Any]:
+    def _run(self, action):
         client, blocked_errors, api_error = self._client()
         try:
-            return client.get_user_info(creator_id)
+            return action(client)
         except blocked_errors as exc:
             raise PlatformBlocked(str(exc)) from exc
         except api_error as exc:
@@ -52,15 +52,27 @@ class XiaohongshuGateway:
         finally:
             client.close()
 
+    def get_creator(self, creator_id: str) -> dict[str, Any]:
+        return self._run(lambda client: client.get_user_info(creator_id))
+
     def get_creator_posts_page(
         self, creator_id: str, cursor: str = ""
     ) -> dict[str, Any]:
-        client, blocked_errors, api_error = self._client()
-        try:
-            return client.get_user_notes(creator_id, cursor=cursor)
-        except blocked_errors as exc:
-            raise PlatformBlocked(str(exc)) from exc
-        except api_error as exc:
-            raise PlatformRequestError(str(exc)) from exc
-        finally:
-            client.close()
+        return self._run(
+            lambda client: client.get_user_notes(creator_id, cursor=cursor)
+        )
+
+    def get_post_detail(
+        self,
+        post_id: str,
+        *,
+        xsec_token: str = "",
+        xsec_source: str = "pc_feed",
+    ) -> dict[str, Any]:
+        return self._run(
+            lambda client: client.get_note_detail(
+                post_id,
+                xsec_token=xsec_token,
+                xsec_source=xsec_source,
+            )
+        )
