@@ -362,3 +362,30 @@ async def system_status() -> dict[str, object]:
             "items": active_workers,
         },
     }
+
+
+@router.get("/jobs/{job_id}/tree")
+async def get_job_tree(job_id: int) -> dict[str, object]:
+    repository = JobRepository()
+    root = repository.get(job_id=job_id)
+    if root is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
+    return {
+        "root_job_id": job_id,
+        "jobs": repository.job_tree(root_job_id=job_id),
+    }
+
+
+@router.post("/jobs/{job_id}/repair")
+async def repair_job(job_id: int) -> dict[str, object]:
+    repository = JobRepository()
+    job = repository.get(job_id=job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
+
+    repaired = repository.repair_subgraph(job_id=job_id)
+    return {
+        "job_id": job_id,
+        "repaired_job_ids": repaired,
+        "repaired_count": len(repaired),
+    }
