@@ -2,6 +2,73 @@
 
 将公开 Creator 内容转换为结构化、可审计、可供 AI 使用的数据集。
 
+## Agent-first 产品方向
+
+Creator Dataset 当前主线已经调整为：
+
+```text
+User
+  ↓
+ChatGPT / Codex / Agent
+  ↓
+Creator Dataset Plugin
+├── Skill
+└── MCP Server
+      ↓
+Creator Dataset Core
+```
+
+普通用户不再以独立 Web SaaS 前端作为主要入口。ChatGPT 本身就是交互界面和分析层。
+
+安装/开发说明见：
+
+- [Agent Plugin / ChatGPT Practice](docs/AGENT_PLUGIN.md)
+
+当前 Plugin 包：
+
+```text
+plugins/creator-dataset/
+├── plugin.json
+├── mcp.json
+└── skills/creator-research/SKILL.md
+```
+
+启动本地 MCP：
+
+```bash
+pip install -e ".[agent,xhs,ocr,stt]"
+creator-dataset-worker
+creator-dataset-mcp
+```
+
+默认 MCP：
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+Agent-facing 工具保持极简：
+
+```text
+account_status
+creator_submit
+creator_status
+creator_posts
+dataset_unlock
+dataset_status
+dataset_get
+dataset_content
+dataset_comments
+```
+
+生成指向开发隧道或未来生产 HTTPS MCP 的可安装 Plugin：
+
+```bash
+creator-dataset-plugin-build \
+  --mcp-url https://YOUR-MCP-ENDPOINT/mcp
+```
+
+
 ## V0.1 目标
 
 V0.1 首先支持 **小红书 Creator 主页 URL**：
@@ -37,7 +104,7 @@ SQLite + JSONL + Markdown + Media
 3. **可恢复**：任何任务都可断点续传，单条失败不影响整个 Creator。
 4. **可审计**：不轻易声称“100% 全量”，记录平台显示数量、实际获取数量、分页状态与差异。
 5. **评论是一等数据**：评论、回复、评论图片及其上下文关系必须结构化保存。
-6. **先 Dataset，后 AI**：V0.1 不做 RAG、Embedding、Agent，先保证数据采集与完整性。
+6. **Dataset 是数据层，Agent 是交互层**：采集、完整性与 provenance 由 Creator Dataset 保证；ChatGPT/Agent 负责用户交互、组织和推理。
 
 ## 当前实现状态
 
