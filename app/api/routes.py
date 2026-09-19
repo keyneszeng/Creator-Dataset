@@ -11,6 +11,8 @@ from app.platforms.xiaohongshu import XiaohongshuAdapter
 from app.platforms.xiaohongshu.resolver import InvalidCreatorUrl
 from app.services.comment_crawl import CommentCrawlService
 from app.services.creator_import import CreatorImportService
+from app.services.export import ExportService
+from app.services.media_pipeline import MediaPipelineService
 from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
 
@@ -40,6 +42,12 @@ class OcrImagesRequest(BaseModel):
     include_comment_images: bool = True
     only_missing: bool = True
     limit: int = Field(default=200, ge=1, le=2000)
+
+
+class ProcessMediaRequest(BaseModel):
+    download_limit: int = Field(default=200, ge=1, le=2000)
+    run_ocr: bool = True
+    ocr_limit: int = Field(default=500, ge=1, le=5000)
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -132,6 +140,7 @@ async def enrich_posts(
         "creator_id": result.creator_id,
         "requested": result.requested,
         "enriched": result.enriched,
+        "media_registered": result.media_registered,
     }
 
 
@@ -186,3 +195,32 @@ async def ocr_images(
             status_code=503,
             detail={"code": "OCR_INTEGRATION_NOT_INSTALLED", "message": str(exc)},
         ) from exc
+
+
+@router.post("/posts/{post_id}/process-media")
+async def process_media(
+    post_id: str,
+    payload: ProcessMediaRequest,
+) -> dict[str, object]:
+    try:
+        service = MediaPipelineService()
+        return await service.process_post(
+            post_id,
+            download_limit=payload.download_limit,
+            run_ocr=payload.run_ocr,
+            ocr_limit=payload.ocr_limit,
+        )
+    except IntegrationNotInstalled as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "INTEGRATION_NOT_INSTALLED", "message": str(exc)},
+        ) from exc
+
+
+@router.post("/posts/{post_id}/export")
+async def export_post(post_id: str) -> dict[str, str]:
+    service = ExportService()
+    try:
+        return service.export_post(post_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
