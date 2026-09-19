@@ -2,8 +2,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.core.repositories import ExportRepository
+from app.core.repositories import ExportRepository, TextUnitRepository
 from app.core.settings import get_settings
+from app.services.analysis_corpus import AnalysisCorpusService
 
 
 def _loads(value: Any) -> Any:
@@ -16,13 +17,23 @@ def _loads(value: Any) -> Any:
 
 
 class ExportService:
-    def __init__(self, repository: ExportRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: ExportRepository | None = None,
+        text_units: TextUnitRepository | None = None,
+    ) -> None:
         self.repository = repository or ExportRepository()
+        self.text_units = text_units or TextUnitRepository()
 
     def export_post(self, post_id: str) -> dict[str, str]:
         bundle = self.repository.get_post_bundle(post_id=post_id)
         if bundle is None:
             raise ValueError(f"Unknown post: {post_id}")
+
+        AnalysisCorpusService(
+            export_repository=self.repository,
+            text_units=self.text_units,
+        ).rebuild_post(post_id)
 
         settings = get_settings()
         export_dir = (
@@ -37,10 +48,12 @@ class ExportService:
         post = self._normalize_row(bundle["post"])
         comments = [self._normalize_row(row) for row in bundle["comments"]]
         media = [self._normalize_media(row) for row in bundle["media"]]
+        text_units = self.text_units.list_for_post(post_id=post_id)
 
         post_path = export_dir / "post.json"
         comments_path = export_dir / "comments.jsonl"
         media_path = export_dir / "media.jsonl"
+        analysis_path = export_dir / "analysis.jsonl"
         markdown_path = export_dir / "knowledge.md"
 
         post_path.write_text(
@@ -61,6 +74,13 @@ class ExportService:
             ),
             encoding="utf-8",
         )
+        analysis_path.write_text(
+            "".join(
+                json.dumps(item, ensure_ascii=False) + "\n"
+                for item in text_units
+            ),
+            encoding="utf-8",
+        )
         markdown_path.write_text(
             self._build_markdown(post, comments, media),
             encoding="utf-8",
@@ -70,6 +90,7 @@ class ExportService:
             "post_json": str(post_path),
             "comments_jsonl": str(comments_path),
             "media_jsonl": str(media_path),
+            "analysis_jsonl": str(analysis_path),
             "knowledge_markdown": str(markdown_path),
         }
 
