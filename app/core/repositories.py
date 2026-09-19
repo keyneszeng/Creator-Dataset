@@ -358,9 +358,10 @@ class MediaRepository:
             connection.execute("""
                 INSERT INTO media (
                     platform, post_id, comment_id, media_type, remote_url,
-                    local_path, download_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT DO NOTHING
+                    local_path, download_status, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT DO UPDATE SET
+                    is_active=1
             """, (
                 platform,
                 post_id,
@@ -386,6 +387,34 @@ class MediaRepository:
             )).fetchone()
         return int(row["id"])
 
+    def reconcile_post_media(
+        self,
+        *,
+        platform: str,
+        post_id: str,
+        media_items: list[dict[str, str]],
+    ) -> None:
+        current = {
+            (item["media_type"], item["remote_url"])
+            for item in media_items
+        }
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE media
+                SET is_active=0
+                WHERE platform=? AND post_id=? AND comment_id IS NULL
+                  AND media_type IN ('image', 'cover', 'video')
+            """, (platform, post_id))
+
+        for item in media_items:
+            self.upsert(
+                platform=platform,
+                post_id=post_id,
+                comment_id=None,
+                media_type=item["media_type"],
+                remote_url=item["remote_url"],
+            )
+
     def list_local_images(
         self,
         *,
@@ -403,6 +432,7 @@ class MediaRepository:
             WHERE post_id=?
               AND media_type IN ({placeholders})
               AND download_status='COMPLETE'
+              AND is_active=1
               AND local_path IS NOT NULL
             ORDER BY id ASC
             LIMIT ?
@@ -425,6 +455,7 @@ class MediaRepository:
                 WHERE post_id=?
                   AND media_type='video'
                   AND download_status='COMPLETE'
+                  AND is_active=1
                   AND local_path IS NOT NULL
                 ORDER BY id ASC
                 LIMIT ?
@@ -441,7 +472,8 @@ class MediaRepository:
             rows = connection.execute("""
                 SELECT id, platform, post_id, comment_id, media_type, remote_url
                 FROM media
-                WHERE post_id=? AND download_status IN ('PENDING', 'FAILED')
+                WHERE post_id=? AND is_active=1
+                  AND download_status IN ('PENDING', 'FAILED')
                 ORDER BY id ASC
                 LIMIT ?
             """, (post_id, limit)).fetchall()
@@ -644,7 +676,7 @@ class ExportRepository:
                 FROM media m
                 LEFT JOIN ocr_results o ON o.media_id=m.id AND o.status='COMPLETE'
                 LEFT JOIN transcripts t ON t.media_id=m.id AND t.status='COMPLETE'
-                WHERE m.post_id=?
+                WHERE m.post_id=? AND m.is_active=1
                 ORDER BY m.id ASC
             """, (post_id,)).fetchall()
 
