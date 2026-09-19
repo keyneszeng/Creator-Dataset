@@ -227,6 +227,113 @@ async def my_entitlements(
     }
 
 
+@router.get("/me/creators")
+async def my_creators(
+    limit: int = 100,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    if principal.user_id == 0 and principal.is_admin:
+        return {
+            "count": 0,
+            "items": [],
+            "unlimited": True,
+        }
+
+    items = create_saas_repository().list_creator_submissions(
+        user_id=principal.user_id,
+        limit=max(1, min(limit, 500)),
+    )
+    return {
+        "count": len(items),
+        "items": items,
+        "unlimited": principal.is_admin,
+    }
+
+
+@router.get("/creators/{creator_id}/posts")
+async def creator_post_catalog(
+    creator_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    platform = "xiaohongshu"
+    access = create_saas_repository()
+
+    if not access.has_creator_submission(
+        user_id=principal.user_id,
+        platform=platform,
+        creator_id=creator_id,
+        is_admin=principal.is_admin,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "CREATOR_NOT_IN_WORKSPACE",
+                "message": (
+                    "Submit this Creator before browsing its Dataset catalog."
+                ),
+            },
+        )
+
+    resolved_limit = max(1, min(limit, 200))
+    resolved_offset = max(0, offset)
+    posts_repository = create_post_repository()
+    items = posts_repository.list_catalog(
+        platform=platform,
+        creator_id=creator_id,
+        limit=resolved_limit,
+        offset=resolved_offset,
+    )
+    total = posts_repository.count_for_creator(
+        platform=platform,
+        creator_id=creator_id,
+    )
+
+    post_ids = [str(item["post_id"]) for item in items]
+    unlocked = access.entitled_post_ids(
+        user_id=principal.user_id,
+        platform=platform,
+        post_ids=post_ids,
+        is_admin=principal.is_admin,
+    )
+    ready = create_dataset_artifact_repository().ready_post_ids(
+        platform=platform,
+        post_ids=post_ids,
+        dataset_schema_version=DATASET_SCHEMA_VERSION,
+    )
+    credits = (
+        {"free": 0, "paid": 0, "total": 0, "unlimited": True}
+        if principal.is_admin
+        else access.credit_balance(user_id=principal.user_id)
+    )
+
+    catalog: list[dict[str, Any]] = []
+    for item in items:
+        row = dict(item)
+        post_id = str(row["post_id"])
+        is_unlocked = post_id in unlocked
+        row["unlocked"] = is_unlocked
+        row["dataset_ready"] = post_id in ready
+        row["unlock_cost_credits"] = 0 if is_unlocked else 1
+        row["can_unlock"] = (
+            principal.is_admin
+            or is_unlocked
+            or int(credits.get("total") or 0) > 0
+        )
+        catalog.append(row)
+
+    return {
+        "creator_id": creator_id,
+        "platform": platform,
+        "total": total,
+        "limit": resolved_limit,
+        "offset": resolved_offset,
+        "credits": credits,
+        "items": catalog,
+    }
+
+
 @router.post("/creators/submit")
 async def submit_creator(
     payload: SubmitCreatorRequest,
