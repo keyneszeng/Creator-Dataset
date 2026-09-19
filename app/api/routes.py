@@ -17,6 +17,7 @@ from app.services.export import ExportService
 from app.services.media_pipeline import MediaPipelineService
 from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
+from app.services.queue import QueueService
 from app.services.stt import SttService
 
 router = APIRouter()
@@ -67,6 +68,7 @@ class CreatorPipelineRequest(BaseModel):
     run_ocr: bool = True
     run_stt: bool = True
     export: bool = True
+    idempotency_key: str | None = Field(default=None, max_length=200)
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -307,3 +309,42 @@ async def get_job(job_id: int) -> dict[str, object]:
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
     return job
+
+
+@router.post("/creators/{creator_id}/enqueue-pipeline")
+async def enqueue_creator_pipeline(
+    creator_id: str,
+    payload: CreatorPipelineRequest,
+) -> dict[str, object]:
+    try:
+        result = QueueService().enqueue_creator_pipeline(
+            creator_id,
+            max_posts=payload.max_posts,
+            run_comments=payload.run_comments,
+            run_media=payload.run_media,
+            run_ocr=payload.run_ocr,
+            run_stt=payload.run_stt,
+            export=payload.export,
+            idempotency_key=payload.idempotency_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "creator_id": result.creator_id,
+        "job_id": result.parent_job_id,
+        "posts_enqueued": result.posts_enqueued,
+        "status": "WAITING",
+    }
+
+
+@router.get("/jobs/{job_id}/progress")
+async def get_job_progress(job_id: int) -> dict[str, object]:
+    repository = JobRepository()
+    job = repository.get(job_id=job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
+    return {
+        "job": job,
+        "children": repository.children_summary(parent_job_id=job_id),
+    }
