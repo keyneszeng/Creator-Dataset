@@ -1,0 +1,66 @@
+from typing import Any
+
+from app.core.credentials import EnvironmentCredentialProvider, parse_cookie_header
+from app.core.errors import (
+    IntegrationNotInstalled,
+    PlatformBlocked,
+    PlatformRequestError,
+)
+
+
+class XiaohongshuGateway:
+    """Thin boundary around the optional Apache-2.0 xiaohongshu-cli package."""
+
+    def __init__(
+        self,
+        credential_provider: EnvironmentCredentialProvider | None = None,
+    ) -> None:
+        self.credential_provider = (
+            credential_provider or EnvironmentCredentialProvider()
+        )
+
+    def _client(self):
+        try:
+            from xhs_cli.client import XhsClient
+            from xhs_cli.exceptions import (
+                IpBlockedError,
+                NeedVerifyError,
+                SessionExpiredError,
+                XhsApiError,
+            )
+        except ImportError as exc:
+            raise IntegrationNotInstalled(
+                'Install the Xiaohongshu integration with pip install -e ".[xhs]".'
+            ) from exc
+
+        credentials = self.credential_provider.get_xiaohongshu()
+        cookies = parse_cookie_header(credentials.cookie_header)
+        if not cookies:
+            raise PlatformRequestError("Configured Xiaohongshu cookie is empty.")
+
+        client = XhsClient(cookies=cookies)
+        return client, (IpBlockedError, NeedVerifyError, SessionExpiredError), XhsApiError
+
+    def get_creator(self, creator_id: str) -> dict[str, Any]:
+        client, blocked_errors, api_error = self._client()
+        try:
+            return client.get_user_info(creator_id)
+        except blocked_errors as exc:
+            raise PlatformBlocked(str(exc)) from exc
+        except api_error as exc:
+            raise PlatformRequestError(str(exc)) from exc
+        finally:
+            client.close()
+
+    def get_creator_posts_page(
+        self, creator_id: str, cursor: str = ""
+    ) -> dict[str, Any]:
+        client, blocked_errors, api_error = self._client()
+        try:
+            return client.get_user_notes(creator_id, cursor=cursor)
+        except blocked_errors as exc:
+            raise PlatformBlocked(str(exc)) from exc
+        except api_error as exc:
+            raise PlatformRequestError(str(exc)) from exc
+        finally:
+            client.close()
