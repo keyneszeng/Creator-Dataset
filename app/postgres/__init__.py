@@ -1,3 +1,13 @@
+from app.postgres.content import (
+    PostgresAuditRepository,
+    PostgresCheckpointRepository,
+    PostgresCommentRepository,
+    PostgresExportRepository,
+    PostgresMediaRepository,
+    PostgresOcrRepository,
+    PostgresTextUnitRepository,
+    PostgresTranscriptRepository,
+)
 from app.postgres.creator_posts import (
     PostgresCreatorRepository,
     PostgresPostRepository,
@@ -9,9 +19,17 @@ from app.postgres.runtime import (
 )
 
 __all__ = [
+    "PostgresAuditRepository",
+    "PostgresCheckpointRepository",
+    "PostgresCommentRepository",
     "PostgresCreatorRepository",
-    "PostgresPostRepository",
+    "PostgresExportRepository",
     "PostgresJobRepository",
+    "PostgresMediaRepository",
+    "PostgresOcrRepository",
+    "PostgresPostRepository",
     "PostgresSharedRateLimiter",
+    "PostgresTextUnitRepository",
+    "PostgresTranscriptRepository",
     "PostgresWorkerRepository",
 ]
