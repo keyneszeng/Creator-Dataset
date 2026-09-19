@@ -200,6 +200,21 @@ CREATE TABLE IF NOT EXISTS crawl_audits (
     audited_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS raw_snapshots (
+    id INTEGER PRIMARY KEY,
+    platform TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    cursor TEXT,
+    payload_sha256 TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, resource_type, object_id, cursor, payload_sha256)
+);
+
+CREATE INDEX IF NOT EXISTS idx_raw_snapshots_object
+ON raw_snapshots(platform, resource_type, object_id, captured_at);
+
 CREATE TABLE IF NOT EXISTS workers (
     worker_id TEXT PRIMARY KEY,
     current_job_id INTEGER,
