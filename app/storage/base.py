@@ -10,6 +10,7 @@ class StoredObject:
     key: str
     size: int
     local_path: str | None = None
+    uri: str | None = None
 
 
 class ObjectStore(Protocol):
