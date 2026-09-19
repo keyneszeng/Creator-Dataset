@@ -49,6 +49,30 @@ class SaasService:
             "free_dataset_credits": free_credits,
         }
 
+    def create_api_key(
+        self,
+        *,
+        user_id: int,
+        name: str,
+    ) -> dict[str, Any]:
+        user = self.repository.get_user(user_id=user_id)
+        if user is None:
+            raise ValueError("Unknown user.")
+
+        secret, prefix, digest = generate_api_key()
+        api_key_id = self.repository.create_api_key(
+            user_id=user_id,
+            name=name,
+            key_prefix=prefix,
+            key_hash=digest,
+        )
+        return {
+            "api_key_id": api_key_id,
+            "api_key": secret,
+            "api_key_prefix": prefix,
+            "name": name,
+        }
+
     def account(self, principal: Principal) -> dict[str, Any]:
         if principal.user_id == 0 and principal.is_admin:
             return {
