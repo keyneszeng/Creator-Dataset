@@ -392,7 +392,7 @@ async def system_status() -> dict[str, object]:
 
 @router.get("/jobs/{job_id}/tree")
 async def get_job_tree(job_id: int) -> dict[str, object]:
-    repository = JobRepository()
+    repository = create_job_repository()
     root = repository.get(job_id=job_id)
     if root is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
@@ -404,7 +404,7 @@ async def get_job_tree(job_id: int) -> dict[str, object]:
 
 @router.post("/jobs/{job_id}/repair")
 async def repair_job(job_id: int) -> dict[str, object]:
-    repository = JobRepository()
+    repository = create_job_repository()
     job = repository.get(job_id=job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
@@ -502,7 +502,7 @@ async def pause_refresh_schedule(schedule_id: int) -> dict[str, object]:
 
 @router.post("/refresh-schedules/{schedule_id}/resume")
 async def resume_refresh_schedule(schedule_id: int) -> dict[str, object]:
-    updated = RefreshScheduleRepository().set_enabled(
+    updated = create_refresh_schedule_repository().set_enabled(
         schedule_id=schedule_id,
         enabled=True,
     )
