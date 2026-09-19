@@ -1,10 +1,9 @@
 import asyncio
 from dataclasses import asdict
-from pathlib import Path
-
 from app.core.repositories import MediaRepository, TranscriptRepository
 from app.stt.base import SttEngine
 from app.stt.factory import create_stt_engine
+from app.storage.materialize import materialize_media
 
 
 class SttService:
@@ -44,22 +43,12 @@ class SttService:
                 skipped += 1
                 continue
 
-            local_path = Path(item["local_path"])
-            if not local_path.exists():
-                failed += 1
-                self.transcripts.save_error(
-                    media_id=item["id"],
-                    engine=self.engine.name,
-                    model=self.engine.model_name,
-                    error=f"Media file not found: {local_path}",
-                )
-                continue
-
             try:
-                result = await asyncio.to_thread(
-                    self.engine.transcribe,
-                    local_path,
-                )
+                with materialize_media(item) as local_path:
+                    result = await asyncio.to_thread(
+                        self.engine.transcribe,
+                        local_path,
+                    )
                 self.transcripts.save_result(
                     media_id=item["id"],
                     engine=result.engine,
