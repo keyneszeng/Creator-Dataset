@@ -622,6 +622,7 @@ class JobRepository:
         payload: dict[str, Any] | None = None,
         priority: int = 100,
         max_attempts: int = 5,
+        depends_on: list[int] | None = None,
     ) -> int:
         with db_session() as connection:
             if idempotency_key:
@@ -650,7 +651,14 @@ class JobRepository:
                 priority,
                 max_attempts,
             ))
-            return int(cursor.lastrowid)
+            job_id = int(cursor.lastrowid)
+            for dependency_id in depends_on or []:
+                connection.execute("""
+                    INSERT OR IGNORE INTO job_dependencies (
+                        job_id, depends_on_job_id
+                    ) VALUES (?, ?)
+                """, (job_id, dependency_id))
+            return job_id
 
     def create(
         self,
@@ -683,6 +691,13 @@ class JobRepository:
                 WHERE status IN ('PENDING', 'RETRY')
                   AND (next_retry_at IS NULL OR next_retry_at <= CURRENT_TIMESTAMP)
                   AND attempt < max_attempts
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM job_dependencies d
+                      JOIN jobs dependency ON dependency.id=d.depends_on_job_id
+                      WHERE d.job_id=jobs.id
+                        AND dependency.status!='COMPLETE'
+                  )
                 ORDER BY priority ASC, created_at ASC, id ASC
                 LIMIT 1
             """).fetchone()
@@ -843,6 +858,27 @@ class JobRepository:
         else:
             self.mark_complete(job_id=parent_job_id)
         return summary
+
+    def reconcile_ancestors(self, *, job_id: int) -> None:
+        current = self.get(job_id=job_id)
+        visited: set[int] = set()
+        while current and current.get("parent_job_id"):
+            parent_id = int(current["parent_job_id"])
+            if parent_id in visited:
+                break
+            visited.add(parent_id)
+            self.reconcile_parent(parent_job_id=parent_id)
+            current = self.get(job_id=parent_id)
+
+    def dependencies(self, *, job_id: int) -> list[int]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT depends_on_job_id
+                FROM job_dependencies
+                WHERE job_id=?
+                ORDER BY depends_on_job_id
+            """, (job_id,)).fetchall()
+        return [int(row["depends_on_job_id"]) for row in rows]
 
     def mark_complete(self, *, job_id: int) -> None:
         with db_session() as connection:
