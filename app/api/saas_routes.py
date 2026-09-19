@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, SecretStr
 
 from app.api.routes import _raise_platform_http_error
 from app.core.errors import (
@@ -19,10 +19,14 @@ from app.repositories.factory import (
     create_post_repository,
     create_saas_repository,
 )
+from app.llm.models import LlmOrganizationTask
+from app.repositories.factory import create_llm_repository
 from app.saas.auth import require_admin, require_principal
 from app.saas.models import Principal
 from app.saas.service import SaasService
+from app.services.llm_organization import LlmOrganizationService
 from app.services.queue import QueueService
+from app.services.simple_view import SimpleDatasetViewService
 from app.storage.factory import create_object_store_for_backend
 
 
@@ -49,6 +53,23 @@ class UpdateUserAccessRequest(BaseModel):
 
 class CreateApiKeyRequest(BaseModel):
     name: str = Field(default="default", min_length=1, max_length=100)
+
+
+class ConnectLlmRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+    provider: str = Field(default="openai_compatible")
+    model: str = Field(min_length=1, max_length=200)
+    base_url: HttpUrl
+    api_key: SecretStr
+
+
+class OrganizeDatasetRequest(BaseModel):
+    connection_id: int = Field(ge=1)
+    task: LlmOrganizationTask = LlmOrganizationTask.SIMPLIFY
+    custom_instruction: str | None = Field(
+        default=None,
+        max_length=4000,
+    )
 
 
 class SubmitCreatorRequest(BaseModel):
@@ -238,6 +259,73 @@ async def admin_user_billing_events(
         "count": len(items),
         "items": items,
     }
+
+
+@router.post("/llm/connections")
+async def connect_llm(
+    payload: ConnectLlmRequest,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    if principal.user_id == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Bootstrap admin must create a persistent user first.",
+        )
+    try:
+        connection = LlmOrganizationService().create_connection(
+            user_id=principal.user_id,
+            provider=payload.provider,
+            label=payload.label,
+            model=payload.model,
+            base_url=str(payload.base_url),
+            api_key=payload.api_key.get_secret_value(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "id": connection["id"],
+        "label": connection["label"],
+        "provider": connection["provider"],
+        "model": connection["model"],
+        "enabled": bool(connection["enabled"]),
+    }
+
+
+@router.get("/llm/connections")
+async def list_llm_connections(
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    if principal.user_id == 0:
+        return {"count": 0, "items": []}
+    items = create_llm_repository().list_connections(
+        user_id=principal.user_id,
+    )
+    safe_items = [
+        {
+            "id": item["id"],
+            "label": item["label"],
+            "provider": item["provider"],
+            "model": item["model"],
+            "enabled": bool(item["enabled"]),
+        }
+        for item in items
+    ]
+    return {"count": len(safe_items), "items": safe_items}
+
+
+@router.delete("/llm/connections/{connection_id}")
+async def disable_llm_connection(
+    connection_id: int,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    disabled = create_llm_repository().disable_connection(
+        user_id=principal.user_id,
+        connection_id=connection_id,
+    )
+    if not disabled:
+        raise HTTPException(status_code=404, detail="Unknown LLM connection.")
+    return {"connection_id": connection_id, "enabled": False}
 
 
 @router.get("/me")
@@ -473,6 +561,94 @@ async def unlock_dataset(
     )
     result["generation_job_id"] = job_id
     return result
+
+
+@router.post("/datasets/{post_id}/organize", status_code=202)
+async def organize_dataset(
+    post_id: str,
+    payload: OrganizeDatasetRequest,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    platform = "xiaohongshu"
+    access = create_saas_repository()
+    if not access.has_entitlement(
+        user_id=principal.user_id,
+        platform=platform,
+        post_id=post_id,
+        is_admin=principal.is_admin,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "DATASET_NOT_UNLOCKED"},
+        )
+
+    try:
+        run_id, job_id = LlmOrganizationService().create_run(
+            user_id=principal.user_id,
+            post_id=post_id,
+            connection_id=payload.connection_id,
+            task=payload.task,
+            custom_instruction=payload.custom_instruction,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "run_id": run_id,
+        "job_id": job_id,
+        "status": "PENDING",
+        "task": payload.task.value,
+    }
+
+
+@router.get("/llm/runs/{run_id}")
+async def get_llm_run(
+    run_id: int,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    run = create_llm_repository().get_run(
+        user_id=principal.user_id,
+        run_id=run_id,
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown LLM run.")
+
+    return {
+        "id": run["id"],
+        "post_id": run["post_id"],
+        "task": run["task"],
+        "status": run["status"],
+        "result": run.get("result"),
+        "error": run.get("error"),
+        "created_at": run.get("created_at"),
+        "completed_at": run.get("completed_at"),
+    }
+
+
+@router.get("/datasets/{post_id}/view")
+async def get_simple_dataset_view(
+    post_id: str,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    platform = "xiaohongshu"
+    access = create_saas_repository()
+    if not access.has_entitlement(
+        user_id=principal.user_id,
+        platform=platform,
+        post_id=post_id,
+        is_admin=principal.is_admin,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "DATASET_NOT_UNLOCKED"},
+        )
+    try:
+        return SimpleDatasetViewService().build(
+            user_id=principal.user_id,
+            post_id=post_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/datasets/{post_id}")
