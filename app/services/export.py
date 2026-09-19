@@ -155,13 +155,21 @@ class ExportService:
             "storage_backend": self.object_store.name,
         }
 
+        artifact_keys = {
+            "post_json": f"{prefix}/post.json",
+            "comments_jsonl": f"{prefix}/comments.jsonl",
+            "media_jsonl": f"{prefix}/media.jsonl",
+            "analysis_jsonl": f"{prefix}/analysis.jsonl",
+            "knowledge_markdown": f"{prefix}/knowledge.md",
+            "manifest_json": f"{prefix}/manifest.json",
+        }
         self.artifacts.save(
             platform=str(post.get("platform") or "xiaohongshu"),
             post_id=post_id,
             dataset_schema_version=DATASET_SCHEMA_VERSION,
             storage_backend=self.object_store.name,
             export_prefix=prefix,
-            artifacts=result,
+            artifacts=artifact_keys,
         )
         return result
 
