@@ -29,6 +29,7 @@ stt = [
 
 [project.scripts]
 creator-dataset-worker = "app.worker:main"
+creator-dataset-scheduler = "app.scheduler:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
