@@ -2,7 +2,9 @@ import asyncio
 import logging
 
 from app.core.logging import configure_logging
-from app.core.repositories import RefreshScheduleRepository
+from typing import Any
+
+from app.repositories.factory import create_refresh_schedule_repository
 from app.services.queue import QueueService
 
 logger = logging.getLogger("creator_dataset.scheduler")
@@ -12,11 +14,11 @@ class RefreshScheduler:
     def __init__(
         self,
         *,
-        schedules: RefreshScheduleRepository | None = None,
+        schedules: Any | None = None,
         queue: QueueService | None = None,
         poll_seconds: float = 30.0,
     ) -> None:
-        self.schedules = schedules or RefreshScheduleRepository()
+        self.schedules = schedules or create_refresh_schedule_repository()
         self.queue = queue or QueueService()
         self.poll_seconds = poll_seconds
 
