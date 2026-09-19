@@ -61,6 +61,7 @@ class ConnectLlmRequest(BaseModel):
     model: str = Field(min_length=1, max_length=200)
     base_url: HttpUrl
     api_key: SecretStr
+    acknowledge_external_processing: bool = False
 
 
 class OrganizeDatasetRequest(BaseModel):
@@ -270,6 +271,17 @@ async def connect_llm(
         raise HTTPException(
             status_code=400,
             detail="Bootstrap admin must create a persistent user first.",
+        )
+    if not payload.acknowledge_external_processing:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "LLM_EXTERNAL_PROCESSING_CONSENT_REQUIRED",
+                "message": (
+                    "Connecting an LLM may send unlocked Dataset text to "
+                    "that external provider."
+                ),
+            },
         )
     try:
         connection = LlmOrganizationService().create_connection(
