@@ -125,6 +125,7 @@ pytest
 - [认证与 Cookie 边界](docs/AUTHENTICATION.md)
 - [当前实现状态](docs/IMPLEMENTATION_STATUS.md)
 - [OCR Pipeline](docs/OCR.md)
+- [Media Pipeline](docs/MEDIA_PIPELINE.md)
 
 ## V0.1 技术建议
 
@@ -154,3 +155,36 @@ pytest
 ## License
 
 待确定。
+
+
+## 当前数据处理链路
+
+```text
+Creator URL
+  ↓
+Creator + Posts
+  ↓
+Post Detail
+  ↓
+Post Media / Comment Media
+  ↓
+Download + SHA256
+  ↓
+OCR
+  ↓
+Comments + Replies
+  ↓
+Audit
+  ↓
+JSON / JSONL / Markdown Dataset
+```
+
+常用接口：
+
+```text
+POST /api/creators/import
+POST /api/creators/{creator_id}/enrich-posts
+POST /api/posts/{post_id}/crawl-comments
+POST /api/posts/{post_id}/process-media
+POST /api/posts/{post_id}/export
+```
