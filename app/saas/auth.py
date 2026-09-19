@@ -21,7 +21,7 @@ def _extract_api_key(
     return None
 
 
-def _authenticate(
+def authenticate_headers(
     *,
     authorization: str | None,
     x_api_key: str | None,
@@ -79,7 +79,7 @@ def require_principal(
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
 ) -> Principal:
-    return _authenticate(
+    return authenticate_headers(
         authorization=authorization,
         x_api_key=x_api_key,
     )
@@ -104,7 +104,7 @@ def require_admin(
             role=UserRole.ADMIN,
         )
 
-    principal = _authenticate(
+    principal = authenticate_headers(
         authorization=authorization,
         x_api_key=x_api_key,
     )
