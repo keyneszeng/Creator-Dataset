@@ -22,11 +22,11 @@ Creator Dataset Core
 ├── Media
 ├── OCR / STT
 ├── Dataset generation
-├── Credits / Entitlements
-└── Billing
+├── Local/free access
+└── Optional future commercial modules
 ```
 
-The existing SaaS APIs remain useful as the service boundary behind the Agent integration and for Admin/Billing operations.
+The current Agent product is fully free for personal use. Existing SaaS/Billing code is retained only as dormant future infrastructure and is not part of the current user flow.
 
 ## Plugin Layout
 
@@ -54,7 +54,7 @@ account_status
 creator_submit
 creator_status
 creator_posts
-dataset_unlock
+dataset_prepare
 dataset_status
 dataset_get
 dataset_content
@@ -105,7 +105,7 @@ Verify:
 2. the nine compact tools are listed;
 3. `account_status` works;
 4. `creator_submit` returns a background import state;
-5. `dataset_unlock(confirm=false)` never silently unlocks a new Dataset.
+5. `dataset_prepare` prepares a Dataset without credits or payment.
 
 ## ChatGPT Development Practice
 
@@ -172,9 +172,9 @@ Expected:
 creator_posts
 ```
 
-Catalog browsing must not consume credits.
+Catalog browsing is free.
 
-### Unlock
+### Prepare Dataset
 
 ```text
 把第 2 篇做成完整 Dataset。
@@ -208,52 +208,27 @@ ChatGPT performs the analysis itself
 
 A separate server-side LLM is not required for the normal Plugin workflow.
 
-## Unlock Safety
+## Free-mode Policy
 
-Unlocking is a controlled write/payment action.
-
-The MCP tool has:
+Current default:
 
 ```text
-confirm=false
+CREATOR_DATASET_AGENT_FREE_MODE=true
 ```
 
-by default.
+In this mode:
 
-Without explicit confirmation it only returns a preview:
+- Creator import is free;
+- Post catalog browsing is free;
+- Dataset preparation is free;
+- Dataset reading is free;
+- comment pagination is free;
+- no credits are consumed;
+- no payment flow is exposed to the Agent.
 
-```text
-CONFIRMATION_REQUIRED
-credit_cost
-free_credits
-paid_credits
-```
+A real Member identity may still be used for workspace isolation and future compatibility, but Dataset preparation grants a `free_mode` entitlement without touching the credit ledger.
 
-The Skill instructs the Agent not to consume a credit just because more data might improve an answer.
-
-## Local Admin vs Real Member Testing
-
-Default local MCP mode runs as a local Admin principal for development.
-
-Admin still needs explicit Agent unlock intent, but the credit cost is zero.
-
-To test the real five-free-credit Member flow, create a Member API key and configure:
-
-```text
-CREATOR_DATASET_MCP_USER_API_KEY=cd_...
-```
-
-MCP tool calls then run as that Member.
-
-This lets ChatGPT exercise:
-
-```text
-5 free unlocks
-→ paid credit balance
-→ PAYMENT_REQUIRED
-```
-
-without changing MCP tool schemas.
+Commercial billing, payment orders, and WeChat Pay code remain dormant for possible future productization.
 
 ## Remote Authentication Boundary
 
@@ -284,7 +259,7 @@ https://creator-dataset.example/mcp
   ↓
 Member identity
   ↓
-Credits / Entitlements
+User/workspace authorization
   ↓
 Creator Dataset
 ```
@@ -309,7 +284,7 @@ The Skill answers “when should it do it?”
 Examples encoded in the Skill:
 
 - browsing a Creator is free;
-- do not automatically unlock Posts;
+- Dataset preparation is free;
 - distinguish author/OCR/STT/comment provenance;
 - do not claim an incomplete import is complete;
 - prefer compact Dataset results before fetching larger evidence;
