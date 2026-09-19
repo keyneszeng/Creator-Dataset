@@ -87,6 +87,32 @@ CREATE TABLE IF NOT EXISTS media (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_unique_source
+ON media(
+    platform,
+    IFNULL(post_id, ''),
+    IFNULL(comment_id, ''),
+    media_type,
+    remote_url
+);
+
+CREATE TABLE IF NOT EXISTS ocr_results (
+    id INTEGER PRIMARY KEY,
+    media_id INTEGER NOT NULL,
+    engine TEXT NOT NULL,
+    engine_version TEXT,
+    language TEXT,
+    full_text TEXT NOT NULL,
+    average_confidence REAL,
+    blocks_json TEXT,
+    status TEXT NOT NULL DEFAULT 'COMPLETE',
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(media_id, engine),
+    FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     job_type TEXT NOT NULL,
