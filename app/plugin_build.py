@@ -81,8 +81,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--mcp-url",
-        required=True,
         help="Streamable HTTP MCP endpoint, normally ending in /mcp.",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Build for the default local MCP endpoint.",
     )
     parser.add_argument(
         "--output",
@@ -96,10 +100,21 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.local:
+        if args.mcp_url:
+            parser.error("--local and --mcp-url cannot be used together.")
+        mcp_url = "http://127.0.0.1:8765/mcp"
+        allow_local_http = True
+    else:
+        if not args.mcp_url:
+            parser.error("Provide --mcp-url or use --local.")
+        mcp_url = args.mcp_url
+        allow_local_http = args.allow_local_http
+
     result = build_plugin(
         output_dir=args.output,
-        mcp_url=args.mcp_url,
-        allow_local_http=args.allow_local_http,
+        mcp_url=mcp_url,
+        allow_local_http=allow_local_http,
     )
     print(result)
 
