@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     # Agent/MCP local development endpoint.
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8765
+    mcp_user_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
