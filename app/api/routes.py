@@ -1,7 +1,13 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
-from app.core.repositories import JobRepository, WorkerRepository
+from app.core.repositories import (
+    JobRepository,
+    RefreshScheduleRepository,
+    WorkerRepository,
+)
 from app.core.errors import (
     AuthenticationRequired,
     IntegrationNotInstalled,
@@ -59,6 +65,14 @@ class ProcessMediaRequest(BaseModel):
 class TranscribeVideosRequest(BaseModel):
     only_missing: bool = True
     limit: int = Field(default=20, ge=1, le=200)
+
+
+class RefreshScheduleRequest(BaseModel):
+    interval_minutes: int = Field(default=1440, ge=60, le=525600)
+    max_pages: int = Field(default=3, ge=1, le=100)
+    max_recent_posts: int = Field(default=30, ge=1, le=500)
+    stop_after_unchanged_pages: int = Field(default=2, ge=1, le=20)
+    run_immediately: bool = True
 
 
 class CreatorRefreshRequest(BaseModel):
@@ -416,3 +430,80 @@ async def enqueue_creator_refresh(
         "status": "WAITING",
         "mode": "incremental_refresh",
     }
+
+
+@router.put("/creators/{creator_id}/refresh-schedule")
+async def upsert_refresh_schedule(
+    creator_id: str,
+    payload: RefreshScheduleRequest,
+) -> dict[str, object]:
+    next_run_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    repository = RefreshScheduleRepository()
+    schedule_id = repository.upsert(
+        platform="xiaohongshu",
+        creator_id=creator_id,
+        interval_minutes=payload.interval_minutes,
+        max_pages=payload.max_pages,
+        max_recent_posts=payload.max_recent_posts,
+        stop_after_unchanged_pages=payload.stop_after_unchanged_pages,
+        next_run_at=next_run_at,
+        enabled=True,
+    )
+
+    job_id = None
+    if payload.run_immediately:
+        job_id = QueueService().enqueue_creator_refresh(
+            creator_id,
+            max_pages=payload.max_pages,
+            max_recent_posts=payload.max_recent_posts,
+            stop_after_unchanged_pages=payload.stop_after_unchanged_pages,
+        )
+        repository.mark_enqueued(
+            schedule_id=schedule_id,
+            interval_minutes=payload.interval_minutes,
+        )
+
+    return {
+        "schedule_id": schedule_id,
+        "creator_id": creator_id,
+        "interval_minutes": payload.interval_minutes,
+        "enabled": True,
+        "immediate_job_id": job_id,
+    }
+
+
+@router.get("/refresh-schedules")
+async def list_refresh_schedules() -> dict[str, object]:
+    items = RefreshScheduleRepository().list_all()
+    return {
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.post("/refresh-schedules/{schedule_id}/pause")
+async def pause_refresh_schedule(schedule_id: int) -> dict[str, object]:
+    updated = RefreshScheduleRepository().set_enabled(
+        schedule_id=schedule_id,
+        enabled=False,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown refresh schedule: {schedule_id}",
+        )
+    return {"schedule_id": schedule_id, "enabled": False}
+
+
+@router.post("/refresh-schedules/{schedule_id}/resume")
+async def resume_refresh_schedule(schedule_id: int) -> dict[str, object]:
+    updated = RefreshScheduleRepository().set_enabled(
+        schedule_id=schedule_id,
+        enabled=True,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown refresh schedule: {schedule_id}",
+        )
+    return {"schedule_id": schedule_id, "enabled": True}
