@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from app.core.migrations import apply_migrations
 from app.core.settings import get_settings
 
 SCHEMA = """
@@ -345,104 +346,8 @@ def db_session(database_path: Path | None = None) -> Iterator[sqlite3.Connection
         connection.close()
 
 
-def _ensure_column(
-    connection: sqlite3.Connection,
-    *,
-    table: str,
-    column: str,
-    definition: str,
-) -> None:
-    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
-    existing = {row["name"] for row in rows}
-    if column not in existing:
-        connection.execute(
-            f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
-        )
-
-
 def init_database(database_path: Path | None = None) -> None:
     with db_session(database_path) as connection:
         connection.execute("PRAGMA journal_mode = WAL")
         connection.executescript(SCHEMA)
-        _ensure_column(
-            connection,
-            table="posts",
-            column="platform_context_json",
-            definition="TEXT",
-        )
-        _ensure_column(
-            connection,
-            table="posts",
-            column="detail_raw_json",
-            definition="TEXT",
-        )
-        for column, definition in (
-            ("discovery_fingerprint", "TEXT"),
-            ("detail_fingerprint", "TEXT"),
-            ("content_fingerprint", "TEXT"),
-            ("media_fingerprint", "TEXT"),
-            ("engagement_fingerprint", "TEXT"),
-            ("comments_fingerprint", "TEXT"),
-            ("last_discovered_at", "DATETIME"),
-            ("last_refreshed_at", "DATETIME"),
-        ):
-            _ensure_column(
-                connection,
-                table="posts",
-                column=column,
-                definition=definition,
-            )
-        for column, definition in (
-            ("storage_backend", "TEXT"),
-            ("storage_key", "TEXT"),
-            ("is_active", "BOOLEAN NOT NULL DEFAULT 1"),
-        ):
-            _ensure_column(
-                connection,
-                table="media",
-                column=column,
-                definition=definition,
-            )
-        for column, definition in (
-            ("parent_job_id", "INTEGER"),
-            ("idempotency_key", "TEXT"),
-            ("payload_json", "TEXT"),
-            ("priority", "INTEGER NOT NULL DEFAULT 100"),
-            ("attempt", "INTEGER NOT NULL DEFAULT 0"),
-            ("max_attempts", "INTEGER NOT NULL DEFAULT 5"),
-            ("lease_owner", "TEXT"),
-            ("lease_expires_at", "DATETIME"),
-            ("heartbeat_at", "DATETIME"),
-        ):
-            _ensure_column(
-                connection,
-                table="jobs",
-                column=column,
-                definition=definition,
-            )
-        connection.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency "
-            "ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL"
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_jobs_runnable "
-            "ON jobs(status, next_retry_at, priority, created_at)"
-        )
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_jobs_parent "
-            "ON jobs(parent_job_id, status)"
-        )
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS job_dependencies (
-                job_id INTEGER NOT NULL,
-                depends_on_job_id INTEGER NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(job_id, depends_on_job_id),
-                FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE,
-                FOREIGN KEY(depends_on_job_id) REFERENCES jobs(id) ON DELETE CASCADE
-            )
-        """)
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_job_dependencies_target "
-            "ON job_dependencies(depends_on_job_id, job_id)"
-        )
+        apply_migrations(connection)
