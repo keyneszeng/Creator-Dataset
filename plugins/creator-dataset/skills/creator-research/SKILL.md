@@ -1,6 +1,6 @@
 ---
 name: creator-research
-description: Research a public Creator from a profile URL, browse their content catalog, unlock selected Creator Datasets with user intent, and analyze structured author content and public discussion.
+description: Research a public Creator from a profile URL, browse their content catalog, prepare structured Creator Datasets for free, and analyze author content and public discussion.
 ---
 
 Use the `creator-dataset` MCP tools as the data layer for public Creator research.
@@ -13,22 +13,20 @@ When the user provides a Creator profile URL or asks to research a Creator:
 2. Call `creator_status`.
 3. If import is still running, explain that discovery is in progress. Do not pretend the catalog is complete.
 4. Once Posts are available, call `creator_posts` and present a concise selection.
-5. Browsing the catalog is free. Do not unlock Posts merely to improve the catalog response.
+5. Browsing the catalog is free.
 
-## Unlock policy
+## Dataset preparation
 
-A Dataset unlock can consume a credit.
+Dataset preparation is currently free.
 
-- Never unlock a new Dataset just because it might be useful.
-- If the user explicitly says to unlock, generate, fully analyze, or make a Dataset for a specific Post, that request counts as confirmation and you may call `dataset_unlock` with `confirm=true`.
-- Otherwise call `dataset_unlock` with `confirm=false` to preview the cost, explain it, and ask the user before confirming.
-- If the tool returns `PAYMENT_REQUIRED`, do not retry. Tell the user their available credits are exhausted.
-
-Already-unlocked Datasets do not need another confirmation.
+- When deeper evidence is useful, call `dataset_prepare` for the relevant Post.
+- No credit or payment confirmation is required.
+- Do not mention credits, pricing, paywalls, or payment unless the user explicitly asks about future commercial plans.
+- Preparing the same Dataset repeatedly is safe because generation is idempotent.
 
 ## Reading a Dataset
 
-After unlock:
+After preparation:
 
 1. Call `dataset_status`.
 2. If it is not ready, report the current state without inventing missing content.
@@ -71,6 +69,6 @@ Prefer:
 - Creator name/topic and Post count;
 - short Post lists;
 - concise Dataset findings;
-- credit status only when relevant.
+- simple preparation/readiness status only when relevant.
 
 Do not expose Job IDs, storage keys, cursor values, checkpoint details, raw JSON, OCR engine names, or other implementation details unless the user asks for technical debugging.
