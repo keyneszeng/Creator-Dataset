@@ -48,7 +48,7 @@ class CreatorRepository:
 class PostRepository:
     def upsert_discovered(self, *, platform: str, creator_id: str, post_id: str,
                           source_url: str | None, title: str | None, post_type: str | None,
-                          raw: dict[str, Any], platform_context: dict[str, Any] | None = None) -> None:
+                          raw: dict[str, Any], platform_context: dict[str, Any] | None = None) -> str:
         fingerprint = _fingerprint({
             "title": title,
             "post_type": post_type,
@@ -107,24 +107,48 @@ class PostRepository:
             "platform_context": json.loads(row["platform_context_json"] or "{}"),
         } for row in rows]
 
-    def update_detail(self, *, platform: str, post_id: str, title: str | None,
-                      content: str | None, post_type: str | None, published_at: int | str | None,
-                      like_count: int | None, favorite_count: int | None, share_count: int | None,
-                      reported_comment_count: int | None, raw: dict[str, Any]) -> str:
-        fingerprint = _fingerprint({
+    def update_detail(
+        self,
+        *,
+        platform: str,
+        post_id: str,
+        title: str | None,
+        content: str | None,
+        post_type: str | None,
+        published_at: int | str | None,
+        like_count: int | None,
+        favorite_count: int | None,
+        share_count: int | None,
+        reported_comment_count: int | None,
+        raw: dict[str, Any],
+        media: list[dict[str, Any]] | None = None,
+    ) -> dict[str, bool]:
+        content_fingerprint = _fingerprint({
             "title": title,
             "content": content,
             "post_type": post_type,
             "published_at": published_at,
+        })
+        media_fingerprint = _fingerprint(media or [])
+        engagement_fingerprint = _fingerprint({
             "like_count": like_count,
             "favorite_count": favorite_count,
             "share_count": share_count,
-            "reported_comment_count": reported_comment_count,
-            "raw": raw,
         })
+        comments_fingerprint = _fingerprint({
+            "reported_comment_count": reported_comment_count,
+        })
+        detail_fingerprint = _fingerprint({
+            "content": content_fingerprint,
+            "media": media_fingerprint,
+            "engagement": engagement_fingerprint,
+            "comments": comments_fingerprint,
+        })
+
         with db_session() as connection:
             existing = connection.execute("""
-                SELECT detail_fingerprint
+                SELECT detail_fingerprint, content_fingerprint, media_fingerprint,
+                       engagement_fingerprint, comments_fingerprint
                 FROM posts
                 WHERE platform=? AND post_id=?
             """, (platform, post_id)).fetchone()
@@ -141,18 +165,41 @@ class PostRepository:
                     reported_comment_count=?,
                     detail_raw_json=?,
                     detail_fingerprint=?,
+                    content_fingerprint=?,
+                    media_fingerprint=?,
+                    engagement_fingerprint=?,
+                    comments_fingerprint=?,
                     last_refreshed_at=CURRENT_TIMESTAMP,
                     updated_at=CURRENT_TIMESTAMP
                 WHERE platform=? AND post_id=?
-            """, (title, content, post_type, published_at, like_count, favorite_count,
-                  share_count, reported_comment_count, json.dumps(raw, ensure_ascii=False),
-                  fingerprint, platform, post_id))
+            """, (
+                title,
+                content,
+                post_type,
+                published_at,
+                like_count,
+                favorite_count,
+                share_count,
+                reported_comment_count,
+                json.dumps(raw, ensure_ascii=False),
+                detail_fingerprint,
+                content_fingerprint,
+                media_fingerprint,
+                engagement_fingerprint,
+                comments_fingerprint,
+                platform,
+                post_id,
+            ))
 
-        if existing is None or existing["detail_fingerprint"] is None:
-            return "NEW"
-        if existing["detail_fingerprint"] != fingerprint:
-            return "CHANGED"
-        return "UNCHANGED"
+        first_detail = existing is None or existing["detail_fingerprint"] is None
+        return {
+            "first_detail": first_detail,
+            "content_changed": first_detail or existing["content_fingerprint"] != content_fingerprint,
+            "media_changed": first_detail or existing["media_fingerprint"] != media_fingerprint,
+            "engagement_changed": first_detail or existing["engagement_fingerprint"] != engagement_fingerprint,
+            "comments_changed": first_detail or existing["comments_fingerprint"] != comments_fingerprint,
+            "any_changed": first_detail or existing["detail_fingerprint"] != detail_fingerprint,
+        }
 
     def get_access_context(self, *, platform: str, post_id: str) -> dict[str, Any] | None:
         with db_session() as connection:
