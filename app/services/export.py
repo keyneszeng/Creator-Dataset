@@ -108,6 +108,9 @@ class ExportService:
     def _normalize_media(self, row: dict[str, Any]) -> dict[str, Any]:
         data = dict(row)
         data["ocr_blocks"] = _loads(data.pop("ocr_blocks_json", None))
+        data["transcript_segments"] = _loads(
+            data.pop("transcript_segments_json", None)
+        )
         return data
 
     def _build_markdown(
@@ -152,6 +155,29 @@ class ExportService:
                     "",
                 ])
 
+        video_transcripts = [
+            item for item in media
+            if item.get("media_type") == "video" and item.get("transcript_text")
+        ]
+        if video_transcripts:
+            lines.extend(["## Video Transcript", ""])
+            for item in video_transcripts:
+                language = item.get("transcript_language") or "unknown"
+                probability = item.get("transcript_language_probability")
+                probability_text = (
+                    f"{float(probability):.3f}"
+                    if probability is not None
+                    else "unknown"
+                )
+                lines.extend([
+                    f"### Media {item['id']} ({item.get('transcript_model') or 'model'})",
+                    "",
+                    f"Detected language: {language} ({probability_text})",
+                    "",
+                    str(item["transcript_text"]),
+                    "",
+                ])
+
         media_by_comment: dict[str, list[dict[str, Any]]] = {}
         for item in media:
             comment_id = item.get("comment_id")
@@ -184,7 +210,8 @@ class ExportService:
             "## Dataset Provenance",
             "",
             "OCR text is derived from source images and remains linked to media_id.",
-            "Original post/comment text and OCR-derived text are intentionally kept separate.",
+            "Video transcripts are derived from source media and remain linked to media_id.",
+            "Original platform text, OCR-derived text, and STT-derived text are intentionally kept separate.",
             "",
         ])
         return "\n".join(lines)
