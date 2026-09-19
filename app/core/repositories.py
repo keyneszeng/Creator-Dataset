@@ -972,6 +972,94 @@ class JobRepository:
         summary["TOTAL"] = sum(summary.values())
         return summary
 
+    def repair_subgraph(self, *, job_id: int) -> list[int]:
+        with db_session() as connection:
+            target = connection.execute(
+                "SELECT id, parent_job_id FROM jobs WHERE id=?",
+                (job_id,),
+            ).fetchone()
+            if target is None:
+                return []
+
+            rows = connection.execute("""
+                WITH RECURSIVE downstream(id) AS (
+                    SELECT ?
+                    UNION
+                    SELECT d.job_id
+                    FROM job_dependencies d
+                    JOIN downstream p ON d.depends_on_job_id=p.id
+                )
+                SELECT id FROM downstream
+            """, (job_id,)).fetchall()
+            repair_ids = [int(row["id"]) for row in rows]
+
+            placeholders = ",".join("?" for _ in repair_ids)
+            connection.execute(f"""
+                UPDATE jobs
+                SET status='PENDING',
+                    attempt=0,
+                    retry_count=0,
+                    last_error=NULL,
+                    next_retry_at=NULL,
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL,
+                    started_at=NULL,
+                    completed_at=NULL
+                WHERE id IN ({placeholders})
+                  AND status IN ('FAILED', 'PARTIAL', 'BLOCKED', 'COMPLETE')
+            """, repair_ids)
+
+            parent_id = target["parent_job_id"]
+            visited: set[int] = set()
+            while parent_id:
+                parent_int = int(parent_id)
+                if parent_int in visited:
+                    break
+                visited.add(parent_int)
+                parent = connection.execute(
+                    "SELECT parent_job_id FROM jobs WHERE id=?",
+                    (parent_int,),
+                ).fetchone()
+                connection.execute("""
+                    UPDATE jobs
+                    SET status='WAITING',
+                        last_error=NULL,
+                        completed_at=NULL
+                    WHERE id=?
+                """, (parent_int,))
+                parent_id = parent["parent_job_id"] if parent else None
+
+        return repair_ids
+
+    def job_tree(self, *, root_job_id: int) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                WITH RECURSIVE tree(
+                    id, parent_job_id, depth
+                ) AS (
+                    SELECT id, parent_job_id, 0
+                    FROM jobs
+                    WHERE id=?
+                    UNION ALL
+                    SELECT j.id, j.parent_job_id, tree.depth + 1
+                    FROM jobs j
+                    JOIN tree ON j.parent_job_id=tree.id
+                )
+                SELECT j.*, tree.depth
+                FROM tree
+                JOIN jobs j ON j.id=tree.id
+                ORDER BY tree.depth ASC, j.id ASC
+            """, (root_job_id,)).fetchall()
+
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.get("payload_json") or "{}")
+            item["dependencies"] = self.dependencies(job_id=int(item["id"]))
+            result.append(item)
+        return result
+
     def queue_summary(self) -> dict[str, int]:
         with db_session() as connection:
             rows = connection.execute("""
