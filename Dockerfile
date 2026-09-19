@@ -18,7 +18,7 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 
 RUN pip install --upgrade pip \
-    && pip install -e ".[xhs,ocr,stt,cloud,postgres]"
+    && pip install -e ".[xhs,ocr,stt,cloud,postgres,llm]"
 
 RUN mkdir -p /app/data
 
