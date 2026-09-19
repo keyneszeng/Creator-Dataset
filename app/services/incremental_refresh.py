@@ -1,12 +1,14 @@
 import asyncio
 from dataclasses import dataclass
 
-from app.core.checkpoints import CheckpointRepository
-from app.core.repositories import (
-    ChangeEventRepository,
-    PostRepository,
-    RawSnapshotRepository,
-    RefreshRunRepository,
+from typing import Any
+
+from app.repositories.factory import (
+    create_change_event_repository,
+    create_checkpoint_repository,
+    create_post_repository,
+    create_raw_snapshot_repository,
+    create_refresh_run_repository,
 )
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 from app.platforms.xiaohongshu.normalizers import normalize_posts_page
@@ -30,22 +32,22 @@ class IncrementalRefreshService:
         self,
         *,
         gateway: XiaohongshuGateway | None = None,
-        posts: PostRepository | None = None,
-        snapshots: RawSnapshotRepository | None = None,
-        changes: ChangeEventRepository | None = None,
-        refresh_runs: RefreshRunRepository | None = None,
+        posts: Any | None = None,
+        snapshots: Any | None = None,
+        changes: Any | None = None,
+        refresh_runs: Any | None = None,
         detail_service: PostDetailService | None = None,
         queue: QueueService | None = None,
-        checkpoints: CheckpointRepository | None = None,
+        checkpoints: Any | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
-        self.posts = posts or PostRepository()
-        self.snapshots = snapshots or RawSnapshotRepository()
-        self.changes = changes or ChangeEventRepository()
-        self.refresh_runs = refresh_runs or RefreshRunRepository()
+        self.posts = posts or create_post_repository()
+        self.snapshots = snapshots or create_raw_snapshot_repository()
+        self.changes = changes or create_change_event_repository()
+        self.refresh_runs = refresh_runs or create_refresh_run_repository()
         self.detail_service = detail_service or PostDetailService()
         self.queue = queue or QueueService()
-        self.checkpoints = checkpoints or CheckpointRepository()
+        self.checkpoints = checkpoints or create_checkpoint_repository()
 
     async def run(
         self,
