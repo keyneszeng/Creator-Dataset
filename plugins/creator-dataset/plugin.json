@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "creator-dataset",
+  "version": "0.1.0",
+  "description": "Give ChatGPT and Codex structured access to public Creator content and discussions.",
+  "author": {
+    "name": "Creator Dataset"
+  },
+  "homepage": "https://github.com/keyneszeng/Creator-Dataset",
+  "repository": "https://github.com/keyneszeng/Creator-Dataset",
+  "keywords": [
+    "creator",
+    "research",
+    "dataset",
+    "knowledge",
+    "xiaohongshu"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Creator Dataset",
+        "shortDescription": "Research public Creators from ChatGPT.",
+        "longDescription": "Import public Creator profiles, browse their Posts, unlock selected structured Datasets, and let ChatGPT analyze author content, OCR, transcripts, comments, and replies."
+      }
+    }
+  }
+}
