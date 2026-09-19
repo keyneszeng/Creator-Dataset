@@ -111,3 +111,146 @@ CREATE TABLE IF NOT EXISTS posts (
 CREATE INDEX IF NOT EXISTS idx_posts_creator
 ON posts(platform, creator_id, id);
 """
+
+
+POSTGRES_CONTENT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS comments (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    comment_id TEXT NOT NULL,
+    root_comment_id TEXT,
+    parent_comment_id TEXT,
+    user_id TEXT,
+    user_name TEXT,
+    user_avatar TEXT,
+    content TEXT,
+    like_count BIGINT,
+    ip_location TEXT,
+    published_at TIMESTAMPTZ,
+    depth INTEGER NOT NULL DEFAULT 0,
+    has_more_replies BOOLEAN NOT NULL DEFAULT FALSE,
+    reply_count BIGINT NOT NULL DEFAULT 0,
+    raw_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(platform, comment_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_post_depth
+ON comments(platform, post_id, depth, id);
+
+CREATE TABLE IF NOT EXISTS media (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    post_id TEXT,
+    comment_id TEXT,
+    media_type TEXT NOT NULL,
+    remote_url TEXT NOT NULL,
+    local_path TEXT,
+    storage_backend TEXT,
+    storage_key TEXT,
+    sha256 TEXT,
+    width INTEGER,
+    height INTEGER,
+    duration DOUBLE PRECISION,
+    download_status TEXT NOT NULL DEFAULT 'PENDING',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_unique_source
+ON media(
+    platform,
+    COALESCE(post_id, ''),
+    COALESCE(comment_id, ''),
+    media_type,
+    remote_url
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_post_active
+ON media(post_id, is_active, download_status);
+
+CREATE TABLE IF NOT EXISTS ocr_results (
+    id BIGSERIAL PRIMARY KEY,
+    media_id BIGINT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    engine TEXT NOT NULL,
+    engine_version TEXT,
+    language TEXT,
+    full_text TEXT NOT NULL,
+    average_confidence DOUBLE PRECISION,
+    blocks_json JSONB,
+    status TEXT NOT NULL DEFAULT 'COMPLETE',
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(media_id, engine)
+);
+
+CREATE TABLE IF NOT EXISTS transcripts (
+    id BIGSERIAL PRIMARY KEY,
+    media_id BIGINT NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    engine TEXT NOT NULL,
+    engine_version TEXT,
+    model TEXT,
+    language TEXT,
+    language_probability DOUBLE PRECISION,
+    full_text TEXT NOT NULL,
+    segments_json JSONB,
+    status TEXT NOT NULL DEFAULT 'COMPLETE',
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(media_id, engine, model)
+);
+
+CREATE TABLE IF NOT EXISTS text_units (
+    id BIGSERIAL PRIMARY KEY,
+    source_key TEXT NOT NULL UNIQUE,
+    platform TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    comment_id TEXT,
+    media_id BIGINT REFERENCES media(id) ON DELETE CASCADE,
+    unit_type TEXT NOT NULL,
+    text TEXT NOT NULL,
+    confidence DOUBLE PRECISION,
+    provenance TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_text_units_post
+ON text_units(post_id, unit_type);
+
+CREATE TABLE IF NOT EXISTS crawl_audits (
+    id BIGSERIAL PRIMARY KEY,
+    post_id TEXT NOT NULL,
+    expected_comments BIGINT,
+    actual_comments BIGINT,
+    root_comments BIGINT,
+    reply_comments BIGINT,
+    failed_threads BIGINT NOT NULL DEFAULT 0,
+    root_pagination_finished BOOLEAN NOT NULL DEFAULT FALSE,
+    reply_threads_total BIGINT NOT NULL DEFAULT 0,
+    reply_threads_finished BIGINT NOT NULL DEFAULT 0,
+    pagination_finished BOOLEAN NOT NULL DEFAULT FALSE,
+    completeness_ratio DOUBLE PRECISION,
+    status TEXT,
+    notes TEXT,
+    audited_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    cursor TEXT,
+    finished BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(platform, scope, object_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_scope
+ON checkpoints(platform, scope, object_id);
+"""
