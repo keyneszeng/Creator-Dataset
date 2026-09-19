@@ -8,6 +8,7 @@ from app.repositories.factory import (
     create_job_repository,
     create_post_repository,
 )
+from app.core.versioning import DATASET_SCHEMA_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +157,55 @@ class QueueService:
                 depends_on=[validation_job],
             )
         return post_job_id
+
+    def enqueue_dataset_generation(
+        self,
+        *,
+        post_id: str,
+        platform: str = "xiaohongshu",
+    ) -> int:
+        context = self.posts.get_access_context(
+            platform=platform,
+            post_id=post_id,
+        )
+        if context is None:
+            raise ValueError(f"Unknown post: {post_id}")
+
+        creator_id = str(context["creator_id"])
+        generation_key = (
+            f"dataset-generation:{platform}:{post_id}:"
+            f"schema:{DATASET_SCHEMA_VERSION}"
+        )
+        existing = self.jobs.get_by_idempotency_key(
+            idempotency_key=generation_key,
+        )
+        if existing is not None:
+            return int(existing["id"])
+
+        root_job_id = self.jobs.enqueue(
+            job_type="DATASET_GENERATION",
+            platform=platform,
+            creator_id=creator_id,
+            post_id=post_id,
+            idempotency_key=generation_key,
+            priority=90,
+            max_attempts=1,
+        )
+        self.jobs.mark_waiting(job_id=root_job_id)
+
+        self.enqueue_post_stages(
+            parent_job_id=root_job_id,
+            creator_id=creator_id,
+            post_id=post_id,
+            run_comments=True,
+            run_media=True,
+            run_ocr=True,
+            run_stt=True,
+            export=True,
+            include_detail=not bool(context.get("has_detail")),
+            key_prefix=f"dataset:{root_job_id}",
+        )
+        return root_job_id
 
     def enqueue_creator_refresh(
         self,
