@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 
+from app.core.checkpoints import CheckpointRepository
 from app.core.repositories import (
     ChangeEventRepository,
     PostRepository,
@@ -35,6 +36,7 @@ class IncrementalRefreshService:
         refresh_runs: RefreshRunRepository | None = None,
         detail_service: PostDetailService | None = None,
         queue: QueueService | None = None,
+        checkpoints: CheckpointRepository | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
         self.posts = posts or PostRepository()
@@ -43,6 +45,7 @@ class IncrementalRefreshService:
         self.refresh_runs = refresh_runs or RefreshRunRepository()
         self.detail_service = detail_service or PostDetailService()
         self.queue = queue or QueueService()
+        self.checkpoints = checkpoints or CheckpointRepository()
 
     async def run(
         self,
@@ -158,6 +161,12 @@ class IncrementalRefreshService:
                 )
                 comments_changed = detail_changes["comments_changed"]
                 engagement_changed = detail_changes["engagement_changed"]
+
+                if comments_changed and not is_new:
+                    self.checkpoints.reset_comment_crawl(
+                        platform="xiaohongshu",
+                        post_id=post_id,
+                    )
 
                 if is_new:
                     self.queue.enqueue_post_stages(
