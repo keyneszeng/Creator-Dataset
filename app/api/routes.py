@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
-from app.core.repositories import JobRepository
+from app.core.repositories import JobRepository, WorkerRepository
 from app.core.errors import (
     AuthenticationRequired,
     IntegrationNotInstalled,
@@ -347,4 +347,18 @@ async def get_job_progress(job_id: int) -> dict[str, object]:
     return {
         "job": job,
         "children": repository.children_summary(parent_job_id=job_id),
+    }
+
+
+@router.get("/system/status")
+async def system_status() -> dict[str, object]:
+    jobs = JobRepository()
+    workers = WorkerRepository()
+    active_workers = workers.active()
+    return {
+        "queue": jobs.queue_summary(),
+        "workers": {
+            "active": len(active_workers),
+            "items": active_workers,
+        },
     }
