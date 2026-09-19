@@ -45,3 +45,29 @@ class SharedRateLimiter:
         delay = await asyncio.to_thread(self.reserve_delay)
         if delay > 0:
             await asyncio.sleep(delay)
+
+
+def create_shared_rate_limiter(
+    *,
+    key: str,
+    min_interval_seconds: float,
+):
+    from app.core.settings import get_settings
+
+    settings = get_settings()
+    if settings.database_backend == "sqlite":
+        return SharedRateLimiter(
+            key=key,
+            min_interval_seconds=min_interval_seconds,
+        )
+
+    if not settings.database_url:
+        raise ValueError(
+            "database_url is required for PostgreSQL rate limiting."
+        )
+    from app.postgres.runtime import PostgresSharedRateLimiter
+    return PostgresSharedRateLimiter(
+        database_url=settings.database_url,
+        key=key,
+        min_interval_seconds=min_interval_seconds,
+    )
