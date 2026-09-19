@@ -4,15 +4,16 @@ from app.storage.local import LocalObjectStore
 from app.storage.s3 import S3ObjectStore
 
 
-def create_object_store(
+def create_object_store_for_backend(
+    backend: str,
     settings: Settings | None = None,
 ) -> ObjectStore:
     settings = settings or get_settings()
 
-    if settings.storage_backend == "local":
+    if backend == "local":
         return LocalObjectStore(settings.storage_local_dir)
 
-    if settings.storage_backend == "s3":
+    if backend == "s3":
         if not settings.s3_bucket:
             raise ValueError("S3 bucket is not configured.")
         return S3ObjectStore(
@@ -24,6 +25,14 @@ def create_object_store(
             prefix=settings.s3_prefix,
         )
 
-    raise ValueError(
-        f"Unsupported storage backend: {settings.storage_backend}"
+    raise ValueError(f"Unsupported storage backend: {backend}")
+
+
+def create_object_store(
+    settings: Settings | None = None,
+) -> ObjectStore:
+    settings = settings or get_settings()
+    return create_object_store_for_backend(
+        settings.storage_backend,
+        settings=settings,
     )
