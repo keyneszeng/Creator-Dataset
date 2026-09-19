@@ -289,6 +289,25 @@ class MediaRepository:
             rows = connection.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
+    def list_local_videos(
+        self,
+        *,
+        post_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT id, post_id, comment_id, media_type, remote_url, local_path
+                FROM media
+                WHERE post_id=?
+                  AND media_type='video'
+                  AND download_status='COMPLETE'
+                  AND local_path IS NOT NULL
+                ORDER BY id ASC
+                LIMIT ?
+            """, (post_id, limit)).fetchall()
+        return [dict(row) for row in rows]
+
     def list_pending_for_post(
         self,
         *,
@@ -392,6 +411,80 @@ class OcrRepository:
 
 
 
+class TranscriptRepository:
+    def exists(
+        self,
+        *,
+        media_id: int,
+        engine: str,
+        model: str,
+    ) -> bool:
+        with db_session() as connection:
+            row = connection.execute("""
+                SELECT 1 FROM transcripts
+                WHERE media_id=? AND engine=? AND model=? AND status='COMPLETE'
+                LIMIT 1
+            """, (media_id, engine, model)).fetchone()
+        return row is not None
+
+    def save_result(
+        self,
+        *,
+        media_id: int,
+        engine: str,
+        engine_version: str | None,
+        model: str,
+        language: str | None,
+        language_probability: float | None,
+        full_text: str,
+        segments: list[dict[str, Any]],
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO transcripts (
+                    media_id, engine, engine_version, model, language,
+                    language_probability, full_text, segments_json, status, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'COMPLETE', NULL)
+                ON CONFLICT(media_id, engine, model) DO UPDATE SET
+                    engine_version=excluded.engine_version,
+                    language=excluded.language,
+                    language_probability=excluded.language_probability,
+                    full_text=excluded.full_text,
+                    segments_json=excluded.segments_json,
+                    status='COMPLETE',
+                    error=NULL,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                media_id,
+                engine,
+                engine_version,
+                model,
+                language,
+                language_probability,
+                full_text,
+                json.dumps(segments, ensure_ascii=False),
+            ))
+
+    def save_error(
+        self,
+        *,
+        media_id: int,
+        engine: str,
+        model: str,
+        error: str,
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO transcripts (
+                    media_id, engine, model, full_text, status, error
+                ) VALUES (?, ?, ?, '', 'FAILED', ?)
+                ON CONFLICT(media_id, engine, model) DO UPDATE SET
+                    status='FAILED',
+                    error=excluded.error,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (media_id, engine, model, error))
+
+
 class ExportRepository:
     def get_post_bundle(self, *, post_id: str) -> dict[str, Any] | None:
         with db_session() as connection:
@@ -416,9 +509,18 @@ class ExportRepository:
                     o.full_text AS ocr_text,
                     o.average_confidence AS ocr_confidence,
                     o.blocks_json AS ocr_blocks_json,
-                    o.status AS ocr_status
+                    o.status AS ocr_status,
+                    t.engine AS transcript_engine,
+                    t.engine_version AS transcript_engine_version,
+                    t.model AS transcript_model,
+                    t.language AS transcript_language,
+                    t.language_probability AS transcript_language_probability,
+                    t.full_text AS transcript_text,
+                    t.segments_json AS transcript_segments_json,
+                    t.status AS transcript_status
                 FROM media m
                 LEFT JOIN ocr_results o ON o.media_id=m.id AND o.status='COMPLETE'
+                LEFT JOIN transcripts t ON t.media_id=m.id AND t.status='COMPLETE'
                 WHERE m.post_id=?
                 ORDER BY m.id ASC
             """, (post_id,)).fetchall()
