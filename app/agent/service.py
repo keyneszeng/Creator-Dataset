@@ -110,7 +110,7 @@ class AgentService:
             user_id=self.principal.user_id,
             platform="xiaohongshu",
             post_ids=post_ids,
-            is_admin=self.principal.is_admin,
+            is_admin=False,
         )
         ready = self.artifacts.ready_post_ids(
             platform="xiaohongshu",
@@ -155,7 +155,7 @@ class AgentService:
             user_id=self.principal.user_id,
             platform="xiaohongshu",
             post_id=post_id,
-            is_admin=self.principal.is_admin,
+            is_admin=False,
         )
         if not already and not confirm:
             account = self.account_status()
