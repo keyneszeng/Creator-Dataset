@@ -9,10 +9,8 @@ class FakeAgentService:
     def account_status(self):
         return {
             "role": "member",
-            "free_credits": 5,
-            "paid_credits": 0,
-            "total_credits": 5,
-            "unlimited": False,
+            "mode": "free",
+            "unlimited": True,
         }
 
     def creator_submit(self, url: str, *, max_pages: int = 20):
@@ -39,13 +37,12 @@ class FakeAgentService:
             "items": [],
         }
 
-    def dataset_unlock(self, post_id: str, *, confirm: bool):
+    def dataset_prepare(self, post_id: str):
         return {
             "post_id": post_id,
-            "status": (
-                "UNLOCKED" if confirm else "CONFIRMATION_REQUIRED"
-            ),
-            "credit_cost": 1,
+            "status": "PREPARING",
+            "free": True,
+            "generation_job_id": 1,
         }
 
     def dataset_status(self, post_id: str):
@@ -95,7 +92,7 @@ async def test_mcp_tools_are_compact_and_callable(monkeypatch) -> None:
             "creator_submit",
             "creator_status",
             "creator_posts",
-            "dataset_unlock",
+            "dataset_prepare",
             "dataset_status",
             "dataset_get",
             "dataset_content",
@@ -104,11 +101,12 @@ async def test_mcp_tools_are_compact_and_callable(monkeypatch) -> None:
 
         account = await client.call_tool("account_status", {})
         account_payload = json.loads(account.content[0].text)
-        assert account_payload["free_credits"] == 5
+        assert account_payload["mode"] == "free"
 
-        preview = await client.call_tool(
-            "dataset_unlock",
-            {"post_id": "post-1", "confirm": False},
+        prepared = await client.call_tool(
+            "dataset_prepare",
+            {"post_id": "post-1"},
         )
-        preview_payload = json.loads(preview.content[0].text)
-        assert preview_payload["status"] == "CONFIRMATION_REQUIRED"
+        prepared_payload = json.loads(prepared.content[0].text)
+        assert prepared_payload["status"] == "PREPARING"
+        assert prepared_payload["free"] is True
