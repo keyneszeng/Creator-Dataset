@@ -222,6 +222,30 @@ class SqliteSaasRepository:
             "post_id": post_id,
         }
 
+    def grant_dataset_entitlement(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_id: str,
+        source: str,
+    ) -> None:
+        with db_session() as connection:
+            user = connection.execute(
+                "SELECT id FROM users WHERE id=? AND status='active'",
+                (user_id,),
+            ).fetchone()
+            if user is None:
+                raise ValueError("Unknown or inactive user.")
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO dataset_entitlements (
+                    user_id, platform, post_id, source
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (user_id, platform, post_id, source),
+            )
+
     def has_entitlement(
         self,
         *,
