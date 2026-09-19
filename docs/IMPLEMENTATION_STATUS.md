@@ -406,8 +406,53 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) and [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
 - [x] cloud-postgres Compose
 - [x] Postgres + MinIO cloud-dev Compose
 - [x] multi-host capability requires PostgreSQL + S3
-- [ ] authentication / tenant isolation
+- [x] API key authentication
+- [x] Admin/member role isolation
 - [ ] Prometheus / OpenTelemetry metrics
 - [ ] queue-age / error-rate / storage alerts
 - [ ] managed Kubernetes/ECS/Cloud Run templates
 - [ ] automated restore drill
+
+
+## SaaS Access & Billing
+
+- [x] users table
+- [x] Admin / Member roles
+- [x] active / suspended account status
+- [x] high-entropy API keys
+- [x] API key hash-only persistence
+- [x] bootstrap Admin flow
+- [x] Admin-only internal operational APIs in SaaS mode
+- [x] default 5 free Dataset credits
+- [x] free / paid credit buckets
+- [x] append-only credit ledger
+- [x] permanent per-Post Dataset entitlements
+- [x] duplicate unlock protection
+- [x] concurrent Postgres unlock overspend protection
+- [x] shared idempotent Dataset Generation Jobs
+- [x] shared dataset_artifacts registry
+- [x] authenticated local artifact download
+- [x] short-lived S3 presigned artifact URLs
+- [x] Admin user listing
+- [x] role/status management
+- [x] API key rotation/revocation
+- [x] credit ledger inspection
+- [x] creator submission ownership audit
+- [x] provider-neutral BillingProvider boundary
+- [x] idempotent billing_events
+- [x] payment event → paid credit ledger transaction
+- [x] SQLite SaaS backend
+- [x] PostgreSQL SaaS backend
+- [ ] self-service signup/login UI
+- [ ] Stripe/Paddle provider adapter
+- [ ] webhook signature verification adapter
+- [ ] organization/team tenancy
+- [ ] subscription plans / recurring credit grants
+
+Member endpoints live under:
+
+```text
+/api/saas/*
+```
+
+See [SAAS.md](SAAS.md) and [BILLING.md](BILLING.md).
