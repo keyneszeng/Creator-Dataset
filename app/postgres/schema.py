@@ -39,4 +39,20 @@ CREATE TABLE IF NOT EXISTS job_dependencies (
 
 CREATE INDEX IF NOT EXISTS idx_job_dependencies_target
 ON job_dependencies(depends_on_job_id, job_id);
+
+CREATE TABLE IF NOT EXISTS workers (
+    worker_id TEXT PRIMARY KEY,
+    current_job_id BIGINT REFERENCES jobs(id) ON DELETE SET NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workers_heartbeat
+ON workers(heartbeat_at);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    next_allowed_at DOUBLE PRECISION NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
