@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.core.errors import IntegrationNotInstalled
+from app.postgres.pool import pooled_connection
 from app.postgres.schema import POSTGRES_JOB_SCHEMA
 
 
@@ -52,23 +52,10 @@ class PostgresJobRepository:
     def __init__(self, database_url: str) -> None:
         if not database_url:
             raise ValueError("database_url is required for PostgreSQL.")
-        try:
-            import psycopg
-            from psycopg.rows import dict_row
-        except ImportError as exc:
-            raise IntegrationNotInstalled(
-                'Install PostgreSQL dependencies with pip install -e ".[postgres]".'
-            ) from exc
-
         self.database_url = database_url
-        self._psycopg = psycopg
-        self._dict_row = dict_row
 
     def _connect(self):
-        return self._psycopg.connect(
-            self.database_url,
-            row_factory=self._dict_row,
-        )
+        return pooled_connection(self.database_url)
 
     def init_schema(self) -> None:
         with self._connect() as connection:
