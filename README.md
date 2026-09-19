@@ -146,6 +146,8 @@ pytest
 - [Backup & Restore](docs/BACKUP_RESTORE.md)
 - [SaaS Access](docs/SAAS.md)
 - [Billing](docs/BILLING.md)
+- [Simplified Frontend](docs/FRONTEND_SIMPLE.md)
+- [User-connected LLM](docs/LLM_INTEGRATION.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
@@ -468,3 +470,62 @@ GET /api/saas/creators/{creator_id}/posts
 ```
 
 Creator 首次导入使用 Durable Job 分批续跑，不再在 HTTP 请求中同步抓完整个 Creator。
+
+
+## 简化前端 / 简化输出
+
+Member 前端保持四个主入口：
+
+```text
+Creators
+Datasets
+AI Organize
+Account
+```
+
+用户默认不需要看到 OCR、STT、Raw JSON、Job DAG、Checkpoint、Storage Key 等内部实现。
+
+已解锁 Dataset 的默认阅读接口：
+
+```text
+GET /api/saas/datasets/{post_id}/view
+```
+
+返回统一简化结果：
+
+```text
+Title
+Summary
+Key Points
+Topics
+Useful Facts
+Audience Questions
+Comment Insights
+Action Items
+Caveats
+```
+
+没有 LLM 时使用确定性的简化视图；用户运行 AI Organize 后，同一接口自动展示最新完成的 AI Derived Result。
+
+## 用户自带 LLM
+
+用户可以可选连接自己的 OpenAI-compatible LLM：
+
+```text
+POST /api/saas/llm/connections
+POST /api/saas/datasets/{post_id}/organize
+GET  /api/saas/llm/runs/{run_id}
+```
+
+原则：
+
+```text
+Raw Dataset = source of truth
+LLM Result  = derived view
+```
+
+LLM 不修改原始 Creator/Post/Comment/OCR/STT 数据。
+
+用户 API Key 使用 AES-GCM 加密保存；云端 LLM Host 必须进入管理员 allow-list；连接外部 LLM 时需要明确确认会把已解锁 Dataset 的文本发送给该 Provider。
+
+初始 BYO-LLM 模型下，用户直接承担自己的模型费用，Creator Dataset 仍只对 Dataset Unlock 计费。
