@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from app.core.logging import configure_logging
+from app.core.settings import get_settings
 from typing import Any
 
 from app.repositories.factory import create_refresh_schedule_repository
@@ -23,42 +24,58 @@ class RefreshScheduler:
         self.poll_seconds = poll_seconds
 
     async def run_once(self) -> int:
-        due = self.schedules.due(limit=100)
-        enqueued = 0
+        settings = get_settings()
+        scheduler_lock = None
 
-        for schedule in due:
-            schedule_id = int(schedule["id"])
-            creator_id = str(schedule["creator_id"])
-            next_run_at = str(schedule["next_run_at"])
+        if settings.database_backend == "postgres":
+            from app.postgres.runtime import PostgresSchedulerLock
+            scheduler_lock = PostgresSchedulerLock(
+                database_url=str(settings.database_url),
+            )
+            if not scheduler_lock.try_acquire():
+                logger.info("scheduler standby: leader lock is held")
+                return 0
 
-            try:
-                self.queue.enqueue_creator_refresh(
-                    creator_id,
-                    max_pages=int(schedule["max_pages"]),
-                    max_recent_posts=int(schedule["max_recent_posts"]),
-                    stop_after_unchanged_pages=int(
-                        schedule["stop_after_unchanged_pages"]
-                    ),
-                    idempotency_key=(
-                        f"schedule:{schedule_id}:{next_run_at}"
-                    ),
-                )
-                self.schedules.mark_enqueued(
-                    schedule_id=schedule_id,
-                    interval_minutes=int(schedule["interval_minutes"]),
-                )
-                enqueued += 1
-                logger.info(
-                    "scheduled creator refresh enqueued",
-                    extra={"creator_id": creator_id},
-                )
-            except Exception:
-                logger.exception(
-                    "failed to enqueue scheduled creator refresh",
-                    extra={"creator_id": creator_id},
-                )
+        try:
+            due = self.schedules.due(limit=100)
+            enqueued = 0
 
-        return enqueued
+            for schedule in due:
+                schedule_id = int(schedule["id"])
+                creator_id = str(schedule["creator_id"])
+                next_run_at = str(schedule["next_run_at"])
+
+                try:
+                    self.queue.enqueue_creator_refresh(
+                        creator_id,
+                        max_pages=int(schedule["max_pages"]),
+                        max_recent_posts=int(schedule["max_recent_posts"]),
+                        stop_after_unchanged_pages=int(
+                            schedule["stop_after_unchanged_pages"]
+                        ),
+                        idempotency_key=(
+                            f"schedule:{schedule_id}:{next_run_at}"
+                        ),
+                    )
+                    self.schedules.mark_enqueued(
+                        schedule_id=schedule_id,
+                        interval_minutes=int(schedule["interval_minutes"]),
+                    )
+                    enqueued += 1
+                    logger.info(
+                        "scheduled creator refresh enqueued",
+                        extra={"creator_id": creator_id},
+                    )
+                except Exception:
+                    logger.exception(
+                        "failed to enqueue scheduled creator refresh",
+                        extra={"creator_id": creator_id},
+                    )
+
+            return enqueued
+        finally:
+            if scheduler_lock is not None:
+                scheduler_lock.release()
 
     async def run_forever(self) -> None:
         while True:
