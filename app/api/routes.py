@@ -4,7 +4,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.core.repositories import (
+    ChangeEventRepository,
     JobRepository,
+    RefreshRunRepository,
     RefreshScheduleRepository,
     WorkerRepository,
 )
@@ -382,6 +384,7 @@ async def system_status() -> dict[str, object]:
             "active": len(active_workers),
             "items": active_workers,
         },
+        "refresh_scheduler": RefreshScheduleRepository().due_summary(),
     }
 
 
@@ -507,3 +510,37 @@ async def resume_refresh_schedule(schedule_id: int) -> dict[str, object]:
             detail=f"Unknown refresh schedule: {schedule_id}",
         )
     return {"schedule_id": schedule_id, "enabled": True}
+
+
+@router.get("/creators/{creator_id}/refresh-history")
+async def get_refresh_history(
+    creator_id: str,
+    limit: int = 100,
+) -> dict[str, object]:
+    items = RefreshRunRepository().list_for_creator(
+        platform="xiaohongshu",
+        creator_id=creator_id,
+        limit=max(1, min(limit, 500)),
+    )
+    return {
+        "creator_id": creator_id,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.get("/creators/{creator_id}/changes")
+async def get_creator_changes(
+    creator_id: str,
+    limit: int = 200,
+) -> dict[str, object]:
+    items = ChangeEventRepository().list_for_creator(
+        platform="xiaohongshu",
+        creator_id=creator_id,
+        limit=max(1, min(limit, 1000)),
+    )
+    return {
+        "creator_id": creator_id,
+        "count": len(items),
+        "items": items,
+    }
