@@ -2,27 +2,25 @@ import json
 from pathlib import Path
 
 from app.core import database
-from app.core.repositories import ExportRepository, MediaRepository, OcrRepository, PostRepository
+from app.core.repositories import (
+    ExportRepository,
+    MediaRepository,
+    OcrRepository,
+    PostRepository,
+)
 from app.services.export import ExportService
+from app.storage.base import StoredObject
+from app.storage.local import LocalObjectStore
 
 
-def test_export_includes_ocr_provenance(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def _seed_post(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "export.sqlite3"
-    data_dir = tmp_path / "data"
     database.init_database(db_path)
 
     class _Settings:
         database_path = db_path
 
-        def __init__(self) -> None:
-            self.data_dir = tmp_path / "data"
-
-    settings = _Settings()
-    monkeypatch.setattr(database, "get_settings", lambda: settings)
-    monkeypatch.setattr("app.services.export.get_settings", lambda: settings)
+    monkeypatch.setattr(database, "get_settings", lambda: _Settings())
 
     posts = PostRepository()
     posts.upsert_discovered(
@@ -68,18 +66,87 @@ def test_export_includes_ocr_provenance(
         average_confidence=0.99,
         blocks=[],
     )
+    return media_id
 
-    result = ExportService(ExportRepository()).export_post("post-1")
 
-    markdown = Path(result["knowledge_markdown"]).read_text(encoding="utf-8")
+def test_export_includes_ocr_provenance(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    media_id = _seed_post(tmp_path, monkeypatch)
+    store = LocalObjectStore(tmp_path / "objects")
+
+    result = ExportService(
+        ExportRepository(),
+        object_store=store,
+    ).export_post("post-1")
+
+    markdown = Path(result["knowledge_markdown"]).read_text(
+        encoding="utf-8"
+    )
     assert "Author body" in markdown
     assert "图片里的知识" in markdown
     assert f"Media {media_id}" in markdown
-
 
     manifest = json.loads(
         Path(result["manifest_json"]).read_text(encoding="utf-8")
     )
     assert manifest["dataset_schema_version"] == "0.2.0"
     assert manifest["post_id"] == "post-1"
+    assert manifest["storage_backend"] == "local"
     assert manifest["files"]["analysis.jsonl"]["sha256"]
+    assert store.exists(
+        key="xiaohongshu/posts/post-1/export/analysis.jsonl"
+    )
+
+
+class FakeCloudStore:
+    name = "s3"
+
+    def __init__(self) -> None:
+        self.uploaded: dict[str, bytes] = {}
+
+    def put_file(self, source: Path, *, key: str) -> StoredObject:
+        payload = source.read_bytes()
+        self.uploaded[key] = payload
+        return StoredObject(
+            backend="s3",
+            key=key,
+            size=len(payload),
+            local_path=None,
+            uri=f"s3://test-bucket/prefix/{key}",
+        )
+
+    def exists(self, *, key: str) -> bool:
+        return key in self.uploaded
+
+    def delete(self, *, key: str) -> None:
+        self.uploaded.pop(key, None)
+
+    def materialize(self, *, key: str, suffix: str = ""):
+        raise NotImplementedError
+
+
+def test_export_returns_cloud_object_references(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _seed_post(tmp_path, monkeypatch)
+    store = FakeCloudStore()
+
+    result = ExportService(
+        ExportRepository(),
+        object_store=store,
+    ).export_post("post-1")
+
+    assert result["storage_backend"] == "s3"
+    assert result["knowledge_markdown"].startswith(
+        "s3://test-bucket/prefix/"
+    )
+    assert result["manifest_json"].startswith(
+        "s3://test-bucket/prefix/"
+    )
+    assert (
+        "xiaohongshu/posts/post-1/export/manifest.json"
+        in store.uploaded
+    )
