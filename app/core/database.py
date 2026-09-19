@@ -152,19 +152,35 @@ ON text_units(post_id, unit_type);
 
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
+    parent_job_id INTEGER,
+    idempotency_key TEXT UNIQUE,
     job_type TEXT NOT NULL,
     platform TEXT,
     creator_id TEXT,
     post_id TEXT,
     comment_id TEXT,
+    payload_json TEXT,
     status TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 100,
+    attempt INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 5,
     retry_count INTEGER DEFAULT 0,
     last_error TEXT,
     next_retry_at DATETIME,
+    lease_owner TEXT,
+    lease_expires_at DATETIME,
+    heartbeat_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
-    completed_at DATETIME
+    completed_at DATETIME,
+    FOREIGN KEY(parent_job_id) REFERENCES jobs(id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_jobs_runnable
+ON jobs(status, next_retry_at, priority, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_parent
+ON jobs(parent_job_id, status);
 
 CREATE TABLE IF NOT EXISTS crawl_audits (
     id INTEGER PRIMARY KEY,
@@ -249,4 +265,33 @@ def init_database(database_path: Path | None = None) -> None:
             table="posts",
             column="detail_raw_json",
             definition="TEXT",
+        )
+        for column, definition in (
+            ("parent_job_id", "INTEGER"),
+            ("idempotency_key", "TEXT"),
+            ("payload_json", "TEXT"),
+            ("priority", "INTEGER NOT NULL DEFAULT 100"),
+            ("attempt", "INTEGER NOT NULL DEFAULT 0"),
+            ("max_attempts", "INTEGER NOT NULL DEFAULT 5"),
+            ("lease_owner", "TEXT"),
+            ("lease_expires_at", "DATETIME"),
+            ("heartbeat_at", "DATETIME"),
+        ):
+            _ensure_column(
+                connection,
+                table="jobs",
+                column=column,
+                definition=definition,
+            )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idempotency "
+            "ON jobs(idempotency_key) WHERE idempotency_key IS NOT NULL"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_runnable "
+            "ON jobs(status, next_retry_at, priority, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_parent "
+            "ON jobs(parent_job_id, status)"
         )
