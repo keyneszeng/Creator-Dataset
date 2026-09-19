@@ -435,3 +435,36 @@ HTTP 402 PAYMENT_REQUIRED
 同一 Dataset 已经解锁后永久保留 entitlement，重复访问和下载不会再次扣 credits。
 
 支付渠道目前保持 provider-neutral。Stripe/Paddle 等未来只需把经过签名验证的支付事件映射为幂等 `billing_events`，再向 paid credit ledger 入账。
+
+
+### SaaS 用户路径
+
+```text
+Submit Creator
+    ↓
+CREATOR_IMPORT 后台任务
+    ↓
+免费浏览 Post Catalog
+    ↓
+选择 Post
+    ↓
+Unlock Dataset
+    ↓
+前 5 篇免费
+    ↓
+第 6 篇起使用 paid credits
+    ↓
+Dataset Generation
+    ↓
+Download
+```
+
+用户浏览 Catalog 本身不消耗 credits：
+
+```text
+GET /api/saas/me/creators
+GET /api/saas/creators/{creator_id}/status
+GET /api/saas/creators/{creator_id}/posts
+```
+
+Creator 首次导入使用 Durable Job 分批续跑，不再在 HTTP 请求中同步抓完整个 Creator。
