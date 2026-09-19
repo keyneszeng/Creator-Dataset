@@ -47,6 +47,7 @@ creator-dataset-scheduler = "app.scheduler:main"
 creator-dataset-backup = "app.backup:main"
 creator-dataset-mcp = "app.mcp_server:main"
 creator-dataset-plugin-build = "app.plugin_build:main"
+creator-dataset-agent = "app.agent_runtime:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
