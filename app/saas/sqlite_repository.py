@@ -428,13 +428,19 @@ class SqliteSaasRepository:
                 (provider, event_id),
             ).fetchone()
             if existing:
-                return {
-                    "billing_event_id": int(existing["id"]),
-                    "applied": False,
-                    "credits": self.credit_balance(user_id=user_id),
-                }
-
-            cursor = connection.execute(
+                rows = connection.execute(
+                    """
+                    SELECT bucket, COALESCE(SUM(delta), 0) AS balance
+                    FROM credit_ledger
+                    WHERE user_id=?
+                    GROUP BY bucket
+                    """,
+                    (user_id,),
+                ).fetchall()
+                billing_event_id = int(existing["id"])
+                applied = False
+            else:
+                cursor = connection.execute(
                 """
                 INSERT INTO billing_events (
                     provider, event_id, user_id, event_type, status,
@@ -451,26 +457,27 @@ class SqliteSaasRepository:
                     json.dumps(payload or {}, ensure_ascii=False),
                 ),
             )
-            billing_event_id = int(cursor.lastrowid)
+                billing_event_id = int(cursor.lastrowid)
 
-            connection.execute(
-                """
-                INSERT INTO credit_ledger (
-                    user_id, bucket, delta, reason, reference_id
-                ) VALUES (?, 'paid', ?, 'payment_purchase', ?)
-                """,
-                (user_id, credits, f"{provider}:{event_id}"),
-            )
+                connection.execute(
+                    """
+                    INSERT INTO credit_ledger (
+                        user_id, bucket, delta, reason, reference_id
+                    ) VALUES (?, 'paid', ?, 'payment_purchase', ?)
+                    """,
+                    (user_id, credits, f"{provider}:{event_id}"),
+                )
+                applied = True
 
-            rows = connection.execute(
-                """
-                SELECT bucket, COALESCE(SUM(delta), 0) AS balance
-                FROM credit_ledger
-                WHERE user_id=?
-                GROUP BY bucket
-                """,
-                (user_id,),
-            ).fetchall()
+                rows = connection.execute(
+                    """
+                    SELECT bucket, COALESCE(SUM(delta), 0) AS balance
+                    FROM credit_ledger
+                    WHERE user_id=?
+                    GROUP BY bucket
+                    """,
+                    (user_id,),
+                ).fetchall()
 
         balances = {"free": 0, "paid": 0}
         for row in rows:
@@ -479,6 +486,6 @@ class SqliteSaasRepository:
 
         return {
             "billing_event_id": billing_event_id,
-            "applied": True,
+            "applied": applied,
             "credits": balances,
         }
