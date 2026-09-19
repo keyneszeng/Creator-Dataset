@@ -113,6 +113,24 @@ CREATE TABLE IF NOT EXISTS ocr_results (
     FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS transcripts (
+    id INTEGER PRIMARY KEY,
+    media_id INTEGER NOT NULL,
+    engine TEXT NOT NULL,
+    engine_version TEXT,
+    model TEXT,
+    language TEXT,
+    language_probability REAL,
+    full_text TEXT NOT NULL,
+    segments_json TEXT,
+    status TEXT NOT NULL DEFAULT 'COMPLETE',
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(media_id, engine, model),
+    FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS text_units (
     id INTEGER PRIMARY KEY,
     source_key TEXT NOT NULL UNIQUE,
