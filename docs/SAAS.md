@@ -1,5 +1,20 @@
 # SaaS Access Architecture
 
+## Current Product Status
+
+The current product is Agent-first and fully free for personal use.
+
+This document describes infrastructure that may be useful later for multi-user/commercial deployment. It is not the current user experience.
+
+Current default:
+
+```text
+CREATOR_DATASET_AGENT_FREE_MODE=true
+```
+
+The ChatGPT/MCP flow prepares and reads Datasets without credits or payment.
+
+
 ## Product Model
 
 Creator Dataset separates shared data infrastructure from user access rights.
