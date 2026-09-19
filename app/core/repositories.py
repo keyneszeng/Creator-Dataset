@@ -222,7 +222,7 @@ class PostRepository:
     def get_access_context(self, *, platform: str, post_id: str) -> dict[str, Any] | None:
         with db_session() as connection:
             row = connection.execute("""
-                SELECT post_id, reported_comment_count, platform_context_json,
+                SELECT post_id, creator_id, reported_comment_count, platform_context_json,
                        detail_raw_json
                 FROM posts WHERE platform=? AND post_id=?
             """, (platform, post_id)).fetchone()
@@ -230,6 +230,7 @@ class PostRepository:
             return None
         return {
             "post_id": row["post_id"],
+            "creator_id": row["creator_id"],
             "reported_comment_count": row["reported_comment_count"],
             "has_detail": row["detail_raw_json"] is not None,
             "platform_context": json.loads(row["platform_context_json"] or "{}"),
