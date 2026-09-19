@@ -60,3 +60,27 @@ class SqliteDatasetArtifactRepository:
         item = dict(row)
         item["artifacts"] = json.loads(item.pop("artifacts_json"))
         return item
+
+
+    def ready_post_ids(
+        self,
+        *,
+        platform: str,
+        post_ids: list[str],
+        dataset_schema_version: str,
+    ) -> set[str]:
+        if not post_ids:
+            return set()
+        placeholders = ",".join("?" for _ in post_ids)
+        with db_session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT post_id
+                FROM dataset_artifacts
+                WHERE platform=?
+                  AND dataset_schema_version=?
+                  AND post_id IN ({placeholders})
+                """,
+                [platform, dataset_schema_version, *post_ids],
+            ).fetchall()
+        return {str(row["post_id"]) for row in rows}
