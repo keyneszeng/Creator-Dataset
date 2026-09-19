@@ -559,3 +559,28 @@ class SqliteSaasRepository:
                 (user_id, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def list_billing_events(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM billing_events
+                WHERE user_id=?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json") or "{}")
+            result.append(item)
+        return result
