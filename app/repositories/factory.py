@@ -170,3 +170,13 @@ def create_validation_repository(settings: Settings | None = None) -> Any:
         return SqliteValidationRepository()
     from app.postgres.validation import PostgresValidationRepository
     return PostgresValidationRepository(_database_url(settings))
+
+
+
+def create_saas_repository(settings: Settings | None = None) -> Any:
+    settings = _settings(settings)
+    if settings.database_backend == "sqlite":
+        from app.saas.sqlite_repository import SqliteSaasRepository
+        return SqliteSaasRepository()
+    from app.postgres.saas import PostgresSaasRepository
+    return PostgresSaasRepository(_database_url(settings))
