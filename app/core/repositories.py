@@ -5,6 +5,16 @@ from typing import Any
 from app.core.database import db_session
 
 
+def _fingerprint(value: Any) -> str:
+    serialized = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
 class CreatorRepository:
     def upsert(self, *, platform: str, creator_id: str, profile_url: str, name: str | None,
                avatar_url: str | None, bio: str | None, follower_count: int | None,
@@ -39,12 +49,24 @@ class PostRepository:
     def upsert_discovered(self, *, platform: str, creator_id: str, post_id: str,
                           source_url: str | None, title: str | None, post_type: str | None,
                           raw: dict[str, Any], platform_context: dict[str, Any] | None = None) -> None:
+        fingerprint = _fingerprint({
+            "title": title,
+            "post_type": post_type,
+            "raw": raw,
+        })
         with db_session() as connection:
+            existing = connection.execute("""
+                SELECT discovery_fingerprint
+                FROM posts
+                WHERE platform=? AND post_id=?
+            """, (platform, post_id)).fetchone()
+
             connection.execute("""
                 INSERT INTO posts (
                     platform, creator_id, post_id, source_url, title,
-                    post_type, raw_json, platform_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    post_type, raw_json, platform_context_json,
+                    discovery_fingerprint, last_discovered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(platform, post_id) DO UPDATE SET
                     creator_id=excluded.creator_id,
                     source_url=COALESCE(excluded.source_url, posts.source_url),
@@ -52,10 +74,19 @@ class PostRepository:
                     post_type=COALESCE(excluded.post_type, posts.post_type),
                     raw_json=excluded.raw_json,
                     platform_context_json=excluded.platform_context_json,
+                    discovery_fingerprint=excluded.discovery_fingerprint,
+                    last_discovered_at=CURRENT_TIMESTAMP,
                     updated_at=CURRENT_TIMESTAMP
             """, (platform, creator_id, post_id, source_url, title, post_type,
                   json.dumps(raw, ensure_ascii=False),
-                  json.dumps(platform_context or {}, ensure_ascii=False)))
+                  json.dumps(platform_context or {}, ensure_ascii=False),
+                  fingerprint))
+
+            if existing is None:
+                return "NEW"
+            if existing["discovery_fingerprint"] != fingerprint:
+                return "CHANGED"
+            return "UNCHANGED"
 
     def list_for_detail(self, *, platform: str, creator_id: str, limit: int = 50,
                         only_missing: bool = True) -> list[dict[str, Any]]:
@@ -79,8 +110,25 @@ class PostRepository:
     def update_detail(self, *, platform: str, post_id: str, title: str | None,
                       content: str | None, post_type: str | None, published_at: int | str | None,
                       like_count: int | None, favorite_count: int | None, share_count: int | None,
-                      reported_comment_count: int | None, raw: dict[str, Any]) -> None:
+                      reported_comment_count: int | None, raw: dict[str, Any]) -> str:
+        fingerprint = _fingerprint({
+            "title": title,
+            "content": content,
+            "post_type": post_type,
+            "published_at": published_at,
+            "like_count": like_count,
+            "favorite_count": favorite_count,
+            "share_count": share_count,
+            "reported_comment_count": reported_comment_count,
+            "raw": raw,
+        })
         with db_session() as connection:
+            existing = connection.execute("""
+                SELECT detail_fingerprint
+                FROM posts
+                WHERE platform=? AND post_id=?
+            """, (platform, post_id)).fetchone()
+
             connection.execute("""
                 UPDATE posts SET
                     title=COALESCE(?, title),
@@ -92,11 +140,19 @@ class PostRepository:
                     share_count=?,
                     reported_comment_count=?,
                     detail_raw_json=?,
+                    detail_fingerprint=?,
+                    last_refreshed_at=CURRENT_TIMESTAMP,
                     updated_at=CURRENT_TIMESTAMP
                 WHERE platform=? AND post_id=?
             """, (title, content, post_type, published_at, like_count, favorite_count,
                   share_count, reported_comment_count, json.dumps(raw, ensure_ascii=False),
-                  platform, post_id))
+                  fingerprint, platform, post_id))
+
+        if existing is None or existing["detail_fingerprint"] is None:
+            return "NEW"
+        if existing["detail_fingerprint"] != fingerprint:
+            return "CHANGED"
+        return "UNCHANGED"
 
     def get_access_context(self, *, platform: str, post_id: str) -> dict[str, Any] | None:
         with db_session() as connection:
@@ -1211,3 +1267,104 @@ class RawSnapshotRepository:
             item["payload"] = json.loads(item.pop("payload_json"))
             result.append(item)
         return result
+
+
+
+class ChangeEventRepository:
+    def record(
+        self,
+        *,
+        platform: str,
+        creator_id: str | None,
+        post_id: str | None,
+        entity_type: str,
+        change_type: str,
+        old_fingerprint: str | None,
+        new_fingerprint: str | None,
+        details: dict[str, Any] | None = None,
+    ) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                INSERT INTO change_events (
+                    platform, creator_id, post_id, entity_type, change_type,
+                    old_fingerprint, new_fingerprint, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                platform,
+                creator_id,
+                post_id,
+                entity_type,
+                change_type,
+                old_fingerprint,
+                new_fingerprint,
+                json.dumps(details or {}, ensure_ascii=False),
+            ))
+        return int(cursor.lastrowid)
+
+    def list_for_creator(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT *
+                FROM change_events
+                WHERE platform=? AND creator_id=?
+                ORDER BY id DESC
+                LIMIT ?
+            """, (platform, creator_id, limit)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["details"] = json.loads(item.pop("details_json") or "{}")
+            result.append(item)
+        return result
+
+
+class RefreshRunRepository:
+    def start(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        mode: str,
+    ) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                INSERT INTO refresh_runs (
+                    platform, creator_id, mode, status
+                ) VALUES (?, ?, ?, 'RUNNING')
+            """, (platform, creator_id, mode))
+        return int(cursor.lastrowid)
+
+    def complete(
+        self,
+        *,
+        refresh_run_id: int,
+        new_posts: int,
+        changed_posts: int,
+        unchanged_posts: int,
+        pages_scanned: int,
+        status: str = "COMPLETE",
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE refresh_runs
+                SET new_posts=?,
+                    changed_posts=?,
+                    unchanged_posts=?,
+                    pages_scanned=?,
+                    status=?,
+                    completed_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (
+                new_posts,
+                changed_posts,
+                unchanged_posts,
+                pages_scanned,
+                status,
+                refresh_run_id,
+            ))
