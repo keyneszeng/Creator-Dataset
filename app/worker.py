@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.errors import (
     AuthenticationRequired,
+    ContinuationRequired,
     IntegrationNotInstalled,
     PlatformBlocked,
     PlatformRequestError,
@@ -70,10 +71,15 @@ class DurableWorker:
         url = str(payload.get("url") or "")
         if not url:
             raise ValueError("Creator import job has no URL.")
-        await CreatorImportService().import_creator(
+        result = await CreatorImportService().import_creator(
             url,
             max_pages=int(payload.get("max_pages") or 20),
         )
+        if not result.discovery_finished:
+            raise ContinuationRequired(
+                f"Creator import has more pages after "
+                f"{result.discovered_posts} discovered Post(s)."
+            )
 
     async def _handle_creator_discovery(self, job: dict[str, Any]) -> None:
         payload = job.get("payload") or {}
@@ -246,6 +252,9 @@ class DurableWorker:
                 },
             )
 
+        except ContinuationRequired as exc:
+            self._continue(job, exc)
+
         except (AuthenticationRequired, PlatformBlocked) as exc:
             self.jobs.mark_failed(
                 job_id=job_id,
@@ -281,6 +290,26 @@ class DurableWorker:
             self.jobs.reconcile_ancestors(job_id=job_id)
 
         return True
+
+    def _continue(
+        self,
+        job: dict[str, Any],
+        exc: Exception,
+    ) -> None:
+        logger.info(
+            "job batch complete; continuation scheduled",
+            extra={
+                "worker_id": self.worker_id,
+                "job_id": int(job["id"]),
+                "creator_id": job.get("creator_id"),
+            },
+        )
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        self.jobs.schedule_retry(
+            job_id=int(job["id"]),
+            error=str(exc),
+            next_retry_at=now,
+        )
 
     def _retry(self, job: dict[str, Any], exc: Exception) -> None:
         logger.warning(
