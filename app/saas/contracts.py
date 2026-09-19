@@ -73,3 +73,38 @@ class SaasRepository(Protocol):
         user_id: int,
         limit: int = 100,
     ) -> list[dict[str, Any]]: ...
+
+    def list_users(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]: ...
+
+    def update_user_access(
+        self,
+        *,
+        user_id: int,
+        role: str | None = None,
+        status: str | None = None,
+    ) -> bool: ...
+
+    def list_credit_ledger(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]: ...
+
+    def list_api_keys(
+        self,
+        *,
+        user_id: int,
+    ) -> list[dict[str, Any]]: ...
+
+    def revoke_api_key(
+        self,
+        *,
+        user_id: int,
+        api_key_id: int,
+    ) -> bool: ...
