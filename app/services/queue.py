@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from app.core.repositories import JobRepository, PostRepository
+from app.jobs.contracts import DurableJobRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,7 +16,7 @@ class QueueService:
     def __init__(
         self,
         *,
-        jobs: JobRepository | None = None,
+        jobs: DurableJobRepository | None = None,
         posts: PostRepository | None = None,
     ) -> None:
         self.jobs = jobs or JobRepository()
