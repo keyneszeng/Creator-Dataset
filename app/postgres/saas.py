@@ -430,3 +430,96 @@ class PostgresSaasRepository:
                     (api_key_id, user_id),
                 )
                 return cursor.rowcount == 1
+
+
+    def apply_paid_credit_purchase(
+        self,
+        *,
+        provider: str,
+        event_id: str,
+        user_id: int,
+        credits: int,
+        amount_minor: int | None,
+        currency: str | None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if credits <= 0:
+            raise ValueError("Purchased credits must be positive.")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM users WHERE id=%s FOR UPDATE",
+                    (user_id,),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError("Unknown user.")
+
+                cursor.execute(
+                    """
+                    INSERT INTO billing_events (
+                        provider, event_id, user_id, event_type, status,
+                        credits, amount_minor, currency, payload_json
+                    ) VALUES (
+                        %s, %s, %s, 'credit_purchase', 'completed',
+                        %s, %s, %s, %s
+                    )
+                    ON CONFLICT(provider, event_id) DO NOTHING
+                    RETURNING id
+                    """,
+                    (
+                        provider,
+                        event_id,
+                        user_id,
+                        credits,
+                        amount_minor,
+                        currency,
+                        payload or {},
+                    ),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM billing_events
+                        WHERE provider=%s AND event_id=%s
+                        """,
+                        (provider, event_id),
+                    )
+                    existing = cursor.fetchone()
+                    applied = False
+                    billing_event_id = int(existing["id"])
+                else:
+                    applied = True
+                    billing_event_id = int(row["id"])
+                    cursor.execute(
+                        """
+                        INSERT INTO credit_ledger (
+                            user_id, bucket, delta, reason, reference_id
+                        ) VALUES (%s, 'paid', %s, 'payment_purchase', %s)
+                        """,
+                        (user_id, credits, f"{provider}:{event_id}"),
+                    )
+
+                cursor.execute(
+                    """
+                    SELECT bucket, COALESCE(SUM(delta), 0) AS balance
+                    FROM credit_ledger
+                    WHERE user_id=%s
+                    GROUP BY bucket
+                    """,
+                    (user_id,),
+                )
+                rows = cursor.fetchall()
+
+        balances = {"free": 0, "paid": 0}
+        for item in rows:
+            balances[str(item["bucket"])] = int(item["balance"] or 0)
+        balances["total"] = balances["free"] + balances["paid"]
+
+        return {
+            "billing_event_id": billing_event_id,
+            "applied": applied,
+            "credits": balances,
+        }
