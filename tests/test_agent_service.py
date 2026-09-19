@@ -6,7 +6,7 @@ from app.core.repositories import PostRepository
 from app.core.settings import Settings
 
 
-def test_local_agent_requires_explicit_unlock_confirmation(
+def test_local_agent_prepares_dataset_for_free(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -15,6 +15,7 @@ def test_local_agent_requires_explicit_unlock_confirmation(
         data_dir=tmp_path / "data",
         storage_backend="local",
         storage_local_dir=tmp_path / "objects",
+        agent_free_mode=True,
     )
     settings.ensure_directories()
     database.init_database(settings.database_path)
@@ -22,6 +23,10 @@ def test_local_agent_requires_explicit_unlock_confirmation(
     monkeypatch.setattr(database, "get_settings", lambda: settings)
     monkeypatch.setattr(
         "app.repositories.factory.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "app.agent.service.get_settings",
         lambda: settings,
     )
 
@@ -39,23 +44,17 @@ def test_local_agent_requires_explicit_unlock_confirmation(
 
     service = AgentService()
 
-    preview = service.dataset_unlock(
-        "post-1",
-        confirm=False,
-    )
-    assert preview["status"] == "CONFIRMATION_REQUIRED"
-    assert preview["credit_cost"] == 0
+    account = service.account_status()
+    assert account["mode"] == "free"
+    assert account["unlimited"] is True
 
-    unlocked = service.dataset_unlock(
-        "post-1",
-        confirm=True,
-    )
-    assert unlocked["status"] == "UNLOCKED"
-    assert unlocked["charged"] is False
-    assert unlocked["generation_job_id"] > 0
+    prepared = service.dataset_prepare("post-1")
+    assert prepared["status"] == "PREPARING"
+    assert prepared["free"] is True
+    assert prepared["generation_job_id"] > 0
 
 
-def test_agent_catalog_does_not_mark_admin_posts_unlocked(
+def test_agent_catalog_marks_posts_freely_available(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -71,6 +70,10 @@ def test_agent_catalog_does_not_mark_admin_posts_unlocked(
     monkeypatch.setattr(database, "get_settings", lambda: settings)
     monkeypatch.setattr(
         "app.repositories.factory.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "app.agent.service.get_settings",
         lambda: settings,
     )
 
@@ -89,4 +92,4 @@ def test_agent_catalog_does_not_mark_admin_posts_unlocked(
     service = AgentService()
     result = service.creator_posts("creator-1")
 
-    assert result["items"][0]["unlocked"] is False
+    assert result["items"][0]["available"] is True
