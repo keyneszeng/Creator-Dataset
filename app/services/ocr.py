@@ -1,10 +1,9 @@
 import asyncio
 from dataclasses import asdict
-from pathlib import Path
-
 from app.core.repositories import MediaRepository, OcrRepository
 from app.ocr.base import OcrEngine
 from app.ocr.factory import create_ocr_engine
+from app.storage.materialize import materialize_media
 
 
 class OcrService:
@@ -45,21 +44,12 @@ class OcrService:
                 skipped += 1
                 continue
 
-            local_path = Path(item["local_path"])
-            if not local_path.exists():
-                failed += 1
-                self.ocr.save_error(
-                    media_id=item["id"],
-                    engine=self.engine.name,
-                    error=f"Image file not found: {local_path}",
-                )
-                continue
-
             try:
-                result = await asyncio.to_thread(
-                    self.engine.recognize,
-                    local_path,
-                )
+                with materialize_media(item) as local_path:
+                    result = await asyncio.to_thread(
+                        self.engine.recognize,
+                        local_path,
+                    )
                 self.ocr.save_result(
                     media_id=item["id"],
                     engine=result.engine,
