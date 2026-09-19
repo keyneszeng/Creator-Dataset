@@ -51,6 +51,7 @@ class S3ObjectStore:
             key=key,
             size=source.stat().st_size,
             local_path=None,
+            uri=f"s3://{self.bucket}/{object_key}",
         )
 
     def exists(self, *, key: str) -> bool:
