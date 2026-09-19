@@ -9,6 +9,7 @@ from app.core.errors import (
 )
 from app.platforms.xiaohongshu import XiaohongshuAdapter
 from app.platforms.xiaohongshu.resolver import InvalidCreatorUrl
+from app.services.comment_crawl import CommentCrawlService
 from app.services.creator_import import CreatorImportService
 from app.services.post_detail import PostDetailService
 
@@ -27,6 +28,11 @@ class ImportCreatorRequest(BaseModel):
 class EnrichPostsRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=200)
     only_missing: bool = True
+
+
+class CrawlCommentsRequest(BaseModel):
+    max_root_pages: int = Field(default=200, ge=1, le=1000)
+    max_reply_pages: int = Field(default=200, ge=1, le=1000)
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -119,4 +125,37 @@ async def enrich_posts(
         "creator_id": result.creator_id,
         "requested": result.requested,
         "enriched": result.enriched,
+    }
+
+
+@router.post("/posts/{post_id}/crawl-comments")
+async def crawl_comments(
+    post_id: str,
+    payload: CrawlCommentsRequest,
+) -> dict[str, object]:
+    service = CommentCrawlService()
+    try:
+        result = await service.crawl_post(
+            post_id,
+            max_root_pages=payload.max_root_pages,
+            max_reply_pages=payload.max_reply_pages,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (
+        AuthenticationRequired,
+        IntegrationNotInstalled,
+        PlatformBlocked,
+        PlatformRequestError,
+    ) as exc:
+        _raise_platform_http_error(exc)
+        raise AssertionError("unreachable")
+
+    return {
+        "post_id": result.post_id,
+        "root_comments": result.root_comments,
+        "reply_comments": result.reply_comments,
+        "failed_threads": result.failed_threads,
+        "status": result.status,
+        "completeness_ratio": result.completeness_ratio,
     }
