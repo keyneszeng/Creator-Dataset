@@ -14,7 +14,7 @@ from app.core.errors import (
 )
 from app.core.jobs import RetryPolicy
 from app.core.logging import configure_logging
-from app.core.repositories import JobRepository, WorkerRepository
+from app.repositories.factory import create_job_repository, create_worker_repository
 from app.jobs.contracts import DurableJobRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
@@ -44,8 +44,8 @@ class DurableWorker:
         self.worker_id = worker_id or (
             f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
         )
-        self.jobs = jobs or JobRepository()
-        self.workers = WorkerRepository()
+        self.jobs = jobs or create_job_repository()
+        self.workers = create_worker_repository()
         self.retry_policy = retry_policy or RetryPolicy()
         self.lease_seconds = settings.worker_lease_seconds
         self.heartbeat_seconds = settings.worker_heartbeat_seconds
