@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.postgres.pool import pooled_connection
@@ -462,7 +463,7 @@ class PostgresSaasRepository:
                         credits, amount_minor, currency, payload_json
                     ) VALUES (
                         %s, %s, %s, 'credit_purchase', 'completed',
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s::jsonb
                     )
                     ON CONFLICT(provider, event_id) DO NOTHING
                     RETURNING id
@@ -474,7 +475,7 @@ class PostgresSaasRepository:
                         credits,
                         amount_minor,
                         currency,
-                        payload or {},
+                        json.dumps(payload or {}, ensure_ascii=False),
                     ),
                 )
                 row = cursor.fetchone()
