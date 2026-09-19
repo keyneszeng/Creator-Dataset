@@ -47,7 +47,8 @@ class ValidationService:
                     """
                     SELECT COUNT(*) AS count
                     FROM media
-                    WHERE post_id=? AND download_status!='COMPLETE'
+                    WHERE post_id=? AND is_active=1
+                      AND download_status!='COMPLETE'
                     """,
                     (post_id,),
                 ).fetchone()["count"]
@@ -59,7 +60,7 @@ class ValidationService:
                     """
                     SELECT COUNT(*) AS count
                     FROM media m
-                    WHERE m.post_id=?
+                    WHERE m.post_id=? AND m.is_active=1
                       AND m.media_type IN ('image', 'cover', 'comment_image')
                       AND m.download_status='COMPLETE'
                       AND NOT EXISTS (
@@ -78,7 +79,7 @@ class ValidationService:
                     """
                     SELECT COUNT(*) AS count
                     FROM media m
-                    WHERE m.post_id=?
+                    WHERE m.post_id=? AND m.is_active=1
                       AND m.media_type='video'
                       AND m.download_status='COMPLETE'
                       AND NOT EXISTS (
