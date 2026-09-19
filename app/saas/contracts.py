@@ -108,3 +108,15 @@ class SaasRepository(Protocol):
         user_id: int,
         api_key_id: int,
     ) -> bool: ...
+
+    def apply_paid_credit_purchase(
+        self,
+        *,
+        provider: str,
+        event_id: str,
+        user_id: int,
+        credits: int,
+        amount_minor: int | None,
+        currency: str | None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]: ...
