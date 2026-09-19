@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     llm_allow_custom_base_url_local: bool = True
     llm_max_input_chars: int = 120000
 
+    # Agent/MCP local development endpoint.
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = 8765
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
