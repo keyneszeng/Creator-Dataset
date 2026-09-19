@@ -1,5 +1,18 @@
 # Billing Architecture
 
+## Current Status: Dormant
+
+Billing is **not active in the current product**.
+
+Creator Dataset is currently a fully free personal-use Agent capability:
+
+```text
+CREATOR_DATASET_AGENT_FREE_MODE=true
+```
+
+The material below is retained only as future commercial architecture. The current MCP/Skill does not expose credits, payment, paywalls, Stripe/Paddle, or WeChat Pay flows.
+
+
 ## Billing Unit
 
 The primary commercial unit is:
