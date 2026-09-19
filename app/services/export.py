@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.repositories.factory import create_export_repository, create_text_unit_repository
+from app.repositories.factory import (
+    create_dataset_artifact_repository,
+    create_export_repository,
+    create_text_unit_repository,
+)
 from app.core.versioning import DATASET_SCHEMA_VERSION, PIPELINE_API_VERSION
 from app.services.analysis_corpus import AnalysisCorpusService
 from app.storage.base import ObjectStore, StoredObject
@@ -27,10 +31,14 @@ class ExportService:
         repository: Any | None = None,
         text_units: Any | None = None,
         object_store: ObjectStore | None = None,
+        artifact_repository: Any | None = None,
     ) -> None:
         self.repository = repository or create_export_repository()
         self.text_units = text_units or create_text_unit_repository()
         self.object_store = object_store or create_object_store()
+        self.artifacts = (
+            artifact_repository or create_dataset_artifact_repository()
+        )
 
     def export_post(self, post_id: str) -> dict[str, str]:
         bundle = self.repository.get_post_bundle(post_id=post_id)
@@ -136,7 +144,7 @@ class ExportService:
                 for name, path in files.items()
             }
 
-        return {
+        result = {
             "post_json": self._reference(stored["post.json"]),
             "comments_jsonl": self._reference(stored["comments.jsonl"]),
             "media_jsonl": self._reference(stored["media.jsonl"]),
@@ -146,6 +154,16 @@ class ExportService:
             "export_prefix": prefix,
             "storage_backend": self.object_store.name,
         }
+
+        self.artifacts.save(
+            platform=str(post.get("platform") or "xiaohongshu"),
+            post_id=post_id,
+            dataset_schema_version=DATASET_SCHEMA_VERSION,
+            storage_backend=self.object_store.name,
+            export_prefix=prefix,
+            artifacts=result,
+        )
+        return result
 
     def _reference(self, stored: StoredObject) -> str:
         if stored.local_path:
