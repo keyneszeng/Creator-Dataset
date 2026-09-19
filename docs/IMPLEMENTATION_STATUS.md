@@ -68,12 +68,19 @@ update discovered_post_count
 
 ### Milestone 3 — Post Detail
 
-- [ ] fetch post detail
-- [ ] preserve xsec context for discovered notes
-- [ ] normalize title/content/published_at
-- [ ] metrics
-- [ ] reported_comment_count
-- [ ] raw response archive
+- [x] fetch post detail
+- [x] preserve xsec context for discovered notes
+- [x] normalize title/content/published_at
+- [x] metrics
+- [x] reported_comment_count
+- [x] detail raw response persistence
+- [x] batch enrichment API
+
+Endpoint:
+
+```text
+POST /api/creators/{creator_id}/enrich-posts
+```
 
 ### Milestone 4 — Media
 
