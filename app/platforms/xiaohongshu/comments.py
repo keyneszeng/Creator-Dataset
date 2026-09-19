@@ -18,6 +18,29 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
+def extract_picture_urls(pictures: list[Any]) -> list[str]:
+    urls: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, str):
+            if value.startswith(("http://", "https://")):
+                urls.append(value)
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                key_lower = str(key).lower()
+                if "url" in key_lower or key_lower in {"info_list", "image_list"}:
+                    visit(nested)
+            return
+        if isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(pictures)
+    # Preserve source order while removing duplicates.
+    return list(dict.fromkeys(urls))
+
+
 def normalize_comment(
     raw: dict[str, Any],
     *,
@@ -62,6 +85,7 @@ def normalize_comment(
             _first(raw, "sub_comment_count", "reply_count")
         ) or 0,
         "pictures": pictures,
+        "picture_urls": extract_picture_urls(pictures),
         "raw": raw,
     }
 
