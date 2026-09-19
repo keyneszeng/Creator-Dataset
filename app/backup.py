@@ -10,6 +10,11 @@ from app.core.settings import get_settings
 
 def create_backup(output_dir: Path) -> Path:
     settings = get_settings()
+    if settings.database_backend != "sqlite":
+        raise RuntimeError(
+            "creator-dataset-backup currently handles SQLite only. "
+            "For PostgreSQL use managed database backups or pg_dump."
+        )
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_dir = output_dir / timestamp
     backup_dir.mkdir(parents=True, exist_ok=False)
