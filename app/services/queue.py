@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import uuid4
 
 from app.core.repositories import JobRepository, PostRepository
 
@@ -30,6 +31,7 @@ class QueueService:
         run_ocr: bool = True,
         run_stt: bool = True,
         export: bool = True,
+        idempotency_key: str | None = None,
     ) -> EnqueueCreatorResult:
         rows = self.posts.list_for_creator(
             platform="xiaohongshu",
@@ -42,6 +44,7 @@ class QueueService:
                 "Import the creator first."
             )
 
+        run_key = idempotency_key or uuid4().hex
         signature = (
             f"comments={int(run_comments)}:"
             f"media={int(run_media)}:"
@@ -53,7 +56,7 @@ class QueueService:
             job_type="CREATOR_PIPELINE",
             platform="xiaohongshu",
             creator_id=creator_id,
-            idempotency_key=f"creator-pipeline:{creator_id}:{signature}",
+            idempotency_key=f"creator-pipeline:{creator_id}:{run_key}",
             payload={
                 "max_posts": max_posts,
                 "run_comments": run_comments,
@@ -76,7 +79,7 @@ class QueueService:
                 post_id=post_id,
                 parent_job_id=parent_job_id,
                 idempotency_key=(
-                    f"post-pipeline:{parent_job_id}:{post_id}:{signature}"
+                    f"post-pipeline:{parent_job_id}:{post_id}"
                 ),
                 payload={
                     "run_comments": run_comments,
