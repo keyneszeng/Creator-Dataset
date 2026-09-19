@@ -39,6 +39,64 @@ SQLite + JSONL + Markdown + Media
 5. **评论是一等数据**：评论、回复、评论图片及其上下文关系必须结构化保存。
 6. **先 Dataset，后 AI**：V0.1 不做 RAG、Embedding、Agent，先保证数据采集与完整性。
 
+## 当前实现状态
+
+已完成 Milestone 0 的第一批工程骨架：
+
+- FastAPI 应用入口
+- SQLite 核心 Schema
+- Settings / 数据目录初始化
+- PlatformAdapter 协议
+- JobStatus / JobType
+- XiaohongshuAdapter skeleton
+- 小红书 Creator URL Resolver
+- Resolver / Database / API 基础测试
+- GitHub Actions CI
+
+当前已可将标准小红书 Creator 主页 URL：
+
+```text
+https://www.xiaohongshu.com/user/profile/<creator_id>
+```
+
+规范化为：
+
+```json
+{
+  "platform": "xiaohongshu",
+  "creator_id": "<creator_id>",
+  "canonical_url": "https://www.xiaohongshu.com/user/profile/<creator_id>"
+}
+```
+
+下一阶段是接入真实 Creator Profile / Post Discovery。
+
+## 本地开发
+
+要求 Python 3.12+。
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -e ".[dev]"
+
+uvicorn app.main:app --reload
+```
+
+服务启动后：
+
+```text
+GET  /api/health
+POST /api/creators/resolve
+```
+
+运行测试：
+
+```bash
+pytest
+```
+
 ## 文档
 
 - [产品与范围](docs/PRD.md)
@@ -47,6 +105,7 @@ SQLite + JSONL + Markdown + Media
 - [API 设计](docs/API.md)
 - [研发路线图](docs/ROADMAP.md)
 - [开源依赖与参考项目](docs/OPEN_SOURCE_REFERENCES.md)
+- [首批研发 Backlog](docs/BACKLOG.md)
 
 ## V0.1 技术建议
 
