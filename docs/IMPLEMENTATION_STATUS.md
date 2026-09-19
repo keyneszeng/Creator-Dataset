@@ -456,3 +456,21 @@ Member endpoints live under:
 ```
 
 See [SAAS.md](SAAS.md) and [BILLING.md](BILLING.md).
+
+
+## SaaS User Journey
+
+- [x] asynchronous Creator submission
+- [x] shared idempotent CREATOR_IMPORT Job
+- [x] bounded Creator import continuation
+- [x] Creator import status endpoint
+- [x] per-user Creator workspace boundary
+- [x] My Creators endpoint
+- [x] free Creator Post Catalog
+- [x] batch entitlement status in Catalog
+- [x] batch Dataset readiness status in Catalog
+- [x] Catalog browsing does not consume credits
+- [x] production readiness requires SaaS auth
+- [x] constant-time bootstrap secret comparison
+- [x] Admin entitlement audit API
+- [x] Admin billing event audit API
