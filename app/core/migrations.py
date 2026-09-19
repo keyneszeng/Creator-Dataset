@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 Migration = Callable[[sqlite3.Connection], None]
 
@@ -209,6 +209,30 @@ def migration_006_dataset_artifacts(connection: sqlite3.Connection) -> None:
     """)
 
 
+def migration_007_billing_events(connection: sqlite3.Connection) -> None:
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS billing_events (
+            id INTEGER PRIMARY KEY,
+            provider TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            credits INTEGER NOT NULL DEFAULT 0,
+            amount_minor INTEGER,
+            currency TEXT,
+            payload_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            processed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, event_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_billing_events_user
+        ON billing_events(user_id, created_at);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_post_detail_context),
     (2, migration_002_incremental_refresh),
@@ -216,6 +240,7 @@ MIGRATIONS: list[tuple[int, Migration]] = [
     (4, migration_004_media_storage),
     (5, migration_005_saas_access),
     (6, migration_006_dataset_artifacts),
+    (7, migration_007_billing_events),
 ]
 
 
