@@ -55,6 +55,23 @@ def check_readiness(*, deep_storage: bool = False) -> dict[str, object]:
         }
         ready = False
 
+    production = str(settings.environment).lower() == "production"
+    saas_auth_ok = (not production) or bool(settings.saas_auth_enabled)
+    checks["saas_security"] = {
+        "ok": saas_auth_ok,
+        "environment": settings.environment,
+        "auth_enabled": bool(settings.saas_auth_enabled),
+        "bootstrap_key_configured": bool(
+            settings.saas_bootstrap_admin_key
+        ),
+        "message": (
+            "Production requires SaaS authentication."
+            if not saas_auth_ok
+            else "SaaS authentication configuration is acceptable."
+        ),
+    }
+    ready = ready and saas_auth_ok
+
     checks["storage"] = {
         "ok": True,
         "backend": settings.storage_backend,
