@@ -1,15 +1,20 @@
-from app.core.repositories import ExportRepository, TextUnitRepository
+from typing import Any
+
+from app.repositories.factory import (
+    create_export_repository,
+    create_text_unit_repository,
+)
 
 
 class AnalysisCorpusService:
     def __init__(
         self,
         *,
-        export_repository: ExportRepository | None = None,
-        text_units: TextUnitRepository | None = None,
+        export_repository: Any | None = None,
+        text_units: Any | None = None,
     ) -> None:
-        self.export_repository = export_repository or ExportRepository()
-        self.text_units = text_units or TextUnitRepository()
+        self.export_repository = export_repository or create_export_repository()
+        self.text_units = text_units or create_text_unit_repository()
 
     def rebuild_post(self, post_id: str) -> dict[str, int]:
         bundle = self.export_repository.get_post_bundle(post_id=post_id)
