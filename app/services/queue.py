@@ -21,6 +21,179 @@ class QueueService:
         self.jobs = jobs or JobRepository()
         self.posts = posts or PostRepository()
 
+    def enqueue_post_stages(
+        self,
+        *,
+        parent_job_id: int,
+        creator_id: str,
+        post_id: str,
+        run_comments: bool,
+        run_media: bool,
+        run_ocr: bool,
+        run_stt: bool,
+        export: bool,
+        include_detail: bool = True,
+        key_prefix: str = "stage",
+    ) -> int:
+        post_job_id = self.jobs.enqueue(
+            job_type="POST_PIPELINE",
+            platform="xiaohongshu",
+            creator_id=creator_id,
+            post_id=post_id,
+            parent_job_id=parent_job_id,
+            idempotency_key=f"{key_prefix}:post:{parent_job_id}:{post_id}",
+            priority=100,
+            max_attempts=1,
+        )
+        self.jobs.mark_waiting(job_id=post_job_id)
+
+        dependencies: list[int] = []
+        detail_job: int | None = None
+        if include_detail:
+            detail_job = self.jobs.enqueue(
+                job_type="POST_DETAIL",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                post_id=post_id,
+                parent_job_id=post_job_id,
+                idempotency_key=f"{key_prefix}:{post_job_id}:detail",
+                priority=100,
+                max_attempts=5,
+            )
+            dependencies.append(detail_job)
+
+        if run_comments:
+            comments_job = self.jobs.enqueue(
+                job_type="COMMENTS",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                post_id=post_id,
+                parent_job_id=post_job_id,
+                idempotency_key=f"{key_prefix}:{post_job_id}:comments",
+                priority=110,
+                max_attempts=5,
+                depends_on=[detail_job] if detail_job else [],
+            )
+            dependencies.append(comments_job)
+
+        media_job: int | None = None
+        if run_media:
+            media_job = self.jobs.enqueue(
+                job_type="MEDIA_DOWNLOAD",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                post_id=post_id,
+                parent_job_id=post_job_id,
+                idempotency_key=f"{key_prefix}:{post_job_id}:media",
+                priority=110,
+                max_attempts=5,
+                depends_on=[detail_job] if detail_job else [],
+            )
+            dependencies.append(media_job)
+
+            if run_ocr:
+                ocr_job = self.jobs.enqueue(
+                    job_type="OCR",
+                    platform="xiaohongshu",
+                    creator_id=creator_id,
+                    post_id=post_id,
+                    parent_job_id=post_job_id,
+                    idempotency_key=f"{key_prefix}:{post_job_id}:ocr",
+                    priority=120,
+                    max_attempts=3,
+                    depends_on=[media_job],
+                )
+                dependencies.append(ocr_job)
+
+            if run_stt:
+                stt_job = self.jobs.enqueue(
+                    job_type="STT",
+                    platform="xiaohongshu",
+                    creator_id=creator_id,
+                    post_id=post_id,
+                    parent_job_id=post_job_id,
+                    idempotency_key=f"{key_prefix}:{post_job_id}:stt",
+                    priority=120,
+                    max_attempts=3,
+                    depends_on=[media_job],
+                )
+                dependencies.append(stt_job)
+
+        validation_job = self.jobs.enqueue(
+            job_type="VALIDATION",
+            platform="xiaohongshu",
+            creator_id=creator_id,
+            post_id=post_id,
+            parent_job_id=post_job_id,
+            idempotency_key=f"{key_prefix}:{post_job_id}:validation",
+            priority=130,
+            max_attempts=3,
+            depends_on=dependencies,
+            payload={
+                "require_comments": run_comments,
+                "require_media": run_media,
+                "require_ocr": run_media and run_ocr,
+                "require_stt": run_media and run_stt,
+            },
+        )
+
+        if export:
+            self.jobs.enqueue(
+                job_type="EXPORT",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                post_id=post_id,
+                parent_job_id=post_job_id,
+                idempotency_key=f"{key_prefix}:{post_job_id}:export",
+                priority=140,
+                max_attempts=3,
+                depends_on=[validation_job],
+            )
+        return post_job_id
+
+    def enqueue_creator_refresh(
+        self,
+        creator_id: str,
+        *,
+        max_pages: int = 3,
+        max_recent_posts: int = 30,
+        stop_after_unchanged_pages: int = 2,
+        idempotency_key: str | None = None,
+    ) -> int:
+        run_key = idempotency_key or uuid4().hex
+        parent_key = f"creator-refresh:{creator_id}:{run_key}"
+        existing = self.jobs.get_by_idempotency_key(
+            idempotency_key=parent_key,
+        )
+        if existing:
+            return int(existing["id"])
+
+        parent_job_id = self.jobs.enqueue(
+            job_type="CREATOR_REFRESH",
+            platform="xiaohongshu",
+            creator_id=creator_id,
+            idempotency_key=parent_key,
+            priority=80,
+            max_attempts=1,
+        )
+        self.jobs.mark_waiting(job_id=parent_job_id)
+        self.jobs.enqueue(
+            job_type="CREATOR_DISCOVERY",
+            platform="xiaohongshu",
+            creator_id=creator_id,
+            parent_job_id=parent_job_id,
+            idempotency_key=f"refresh-discovery:{parent_job_id}",
+            payload={
+                "refresh": True,
+                "max_pages": max_pages,
+                "max_recent_posts": max_recent_posts,
+                "stop_after_unchanged_pages": stop_after_unchanged_pages,
+            },
+            priority=80,
+            max_attempts=5,
+        )
+        return parent_job_id
+
     def enqueue_creator_pipeline(
         self,
         creator_id: str,
@@ -71,118 +244,18 @@ class QueueService:
         self.jobs.mark_waiting(job_id=creator_job_id)
 
         for row in rows:
-            post_id = str(row["post_id"])
-            post_job_id = self.jobs.enqueue(
-                job_type="POST_PIPELINE",
-                platform="xiaohongshu",
-                creator_id=creator_id,
-                post_id=post_id,
+            self.enqueue_post_stages(
                 parent_job_id=creator_job_id,
-                idempotency_key=f"post-pipeline:{creator_job_id}:{post_id}",
-                priority=100,
-                max_attempts=1,
-            )
-            self.jobs.mark_waiting(job_id=post_job_id)
-
-            detail_job = self.jobs.enqueue(
-                job_type="POST_DETAIL",
-                platform="xiaohongshu",
                 creator_id=creator_id,
-                post_id=post_id,
-                parent_job_id=post_job_id,
-                idempotency_key=f"stage:{post_job_id}:detail",
-                priority=100,
-                max_attempts=5,
+                post_id=str(row["post_id"]),
+                run_comments=run_comments,
+                run_media=run_media,
+                run_ocr=run_ocr,
+                run_stt=run_stt,
+                export=export,
+                include_detail=True,
+                key_prefix="stage",
             )
-
-            terminal_dependencies: list[int] = [detail_job]
-
-            if run_comments:
-                comments_job = self.jobs.enqueue(
-                    job_type="COMMENTS",
-                    platform="xiaohongshu",
-                    creator_id=creator_id,
-                    post_id=post_id,
-                    parent_job_id=post_job_id,
-                    idempotency_key=f"stage:{post_job_id}:comments",
-                    priority=110,
-                    max_attempts=5,
-                    depends_on=[detail_job],
-                )
-                terminal_dependencies.append(comments_job)
-
-            if run_media:
-                media_job = self.jobs.enqueue(
-                    job_type="MEDIA_DOWNLOAD",
-                    platform="xiaohongshu",
-                    creator_id=creator_id,
-                    post_id=post_id,
-                    parent_job_id=post_job_id,
-                    idempotency_key=f"stage:{post_job_id}:media",
-                    priority=110,
-                    max_attempts=5,
-                    depends_on=[detail_job],
-                )
-                terminal_dependencies.append(media_job)
-
-                if run_ocr:
-                    ocr_job = self.jobs.enqueue(
-                        job_type="OCR",
-                        platform="xiaohongshu",
-                        creator_id=creator_id,
-                        post_id=post_id,
-                        parent_job_id=post_job_id,
-                        idempotency_key=f"stage:{post_job_id}:ocr",
-                        priority=120,
-                        max_attempts=3,
-                        depends_on=[media_job],
-                    )
-                    terminal_dependencies.append(ocr_job)
-
-                if run_stt:
-                    stt_job = self.jobs.enqueue(
-                        job_type="STT",
-                        platform="xiaohongshu",
-                        creator_id=creator_id,
-                        post_id=post_id,
-                        parent_job_id=post_job_id,
-                        idempotency_key=f"stage:{post_job_id}:stt",
-                        priority=120,
-                        max_attempts=3,
-                        depends_on=[media_job],
-                    )
-                    terminal_dependencies.append(stt_job)
-
-            validation_job = self.jobs.enqueue(
-                job_type="VALIDATION",
-                platform="xiaohongshu",
-                creator_id=creator_id,
-                post_id=post_id,
-                parent_job_id=post_job_id,
-                idempotency_key=f"stage:{post_job_id}:validation",
-                priority=130,
-                max_attempts=3,
-                depends_on=terminal_dependencies,
-                payload={
-                    "require_comments": run_comments,
-                    "require_media": run_media,
-                    "require_ocr": run_media and run_ocr,
-                    "require_stt": run_media and run_stt,
-                },
-            )
-
-            if export:
-                self.jobs.enqueue(
-                    job_type="EXPORT",
-                    platform="xiaohongshu",
-                    creator_id=creator_id,
-                    post_id=post_id,
-                    parent_job_id=post_job_id,
-                    idempotency_key=f"stage:{post_job_id}:export",
-                    priority=140,
-                    max_attempts=3,
-                    depends_on=[validation_job],
-                )
 
         return EnqueueCreatorResult(
             parent_job_id=creator_job_id,
