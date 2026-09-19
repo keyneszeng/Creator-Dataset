@@ -37,6 +37,24 @@ class CreatorRepository:
             """, (platform, creator_id, profile_url, name, avatar_url, bio,
                   follower_count, following_count, json.dumps(raw, ensure_ascii=False)))
 
+    def get(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+    ) -> dict[str, Any] | None:
+        with db_session() as connection:
+            row = connection.execute("""
+                SELECT *
+                FROM creators
+                WHERE platform=? AND creator_id=?
+            """, (platform, creator_id)).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["raw"] = json.loads(result.pop("raw_json") or "{}")
+        return result
+
     def set_discovered_post_count(self, *, platform: str, creator_id: str, count: int) -> None:
         with db_session() as connection:
             connection.execute("""
