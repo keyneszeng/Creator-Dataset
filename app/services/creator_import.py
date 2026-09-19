@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 
 from app.core.checkpoints import CheckpointRepository
-from app.core.repositories import CreatorRepository, PostRepository
+from app.core.repositories import CreatorRepository, PostRepository, RawSnapshotRepository
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 from app.platforms.xiaohongshu.normalizers import (
     normalize_creator,
@@ -26,11 +26,13 @@ class CreatorImportService:
         creator_repository: CreatorRepository | None = None,
         post_repository: PostRepository | None = None,
         checkpoint_repository: CheckpointRepository | None = None,
+        raw_snapshots: RawSnapshotRepository | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
         self.creators = creator_repository or CreatorRepository()
         self.posts = post_repository or PostRepository()
         self.checkpoints = checkpoint_repository or CheckpointRepository()
+        self.raw_snapshots = raw_snapshots or RawSnapshotRepository()
 
     async def import_creator(
         self, url: str, *, max_pages: int = 20
@@ -40,6 +42,13 @@ class CreatorImportService:
 
         raw_creator = await asyncio.to_thread(
             self.gateway.get_creator, creator_id
+        )
+        self.raw_snapshots.save(
+            platform="xiaohongshu",
+            resource_type="creator_profile",
+            object_id=creator_id,
+            cursor=None,
+            payload=raw_creator,
         )
         creator = normalize_creator(raw_creator, creator_id)
         self.creators.upsert(
@@ -68,6 +77,13 @@ class CreatorImportService:
                 self.gateway.get_creator_posts_page,
                 creator_id,
                 cursor,
+            )
+            self.raw_snapshots.save(
+                platform="xiaohongshu",
+                resource_type="creator_posts_page",
+                object_id=creator_id,
+                cursor=cursor or None,
+                payload=raw_page,
             )
             page = normalize_posts_page(raw_page)
 
