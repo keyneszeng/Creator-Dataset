@@ -254,3 +254,81 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 CREATE INDEX IF NOT EXISTS idx_checkpoints_scope
 ON checkpoints(platform, scope, object_id);
 """
+
+
+POSTGRES_REFRESH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS change_events (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT,
+    post_id TEXT,
+    entity_type TEXT NOT NULL,
+    change_type TEXT NOT NULL,
+    old_fingerprint TEXT,
+    new_fingerprint TEXT,
+    details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_change_events_creator
+ON change_events(platform, creator_id, detected_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_change_events_post
+ON change_events(platform, post_id, detected_at DESC);
+
+CREATE TABLE IF NOT EXISTS refresh_runs (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    new_posts BIGINT NOT NULL DEFAULT 0,
+    changed_posts BIGINT NOT NULL DEFAULT 0,
+    unchanged_posts BIGINT NOT NULL DEFAULT 0,
+    pages_scanned BIGINT NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'RUNNING',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS refresh_schedules (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    interval_minutes INTEGER NOT NULL,
+    max_pages INTEGER NOT NULL DEFAULT 3,
+    max_recent_posts INTEGER NOT NULL DEFAULT 30,
+    stop_after_unchanged_pages INTEGER NOT NULL DEFAULT 2,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    next_run_at TIMESTAMPTZ NOT NULL,
+    last_run_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(platform, creator_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_schedules_due
+ON refresh_schedules(enabled, next_run_at);
+
+CREATE TABLE IF NOT EXISTS raw_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    platform TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    cursor TEXT,
+    payload_sha256 TEXT NOT NULL,
+    payload_json JSONB NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_snapshots_unique
+ON raw_snapshots(
+    platform,
+    resource_type,
+    object_id,
+    COALESCE(cursor, ''),
+    payload_sha256
+);
+
+CREATE INDEX IF NOT EXISTS idx_raw_snapshots_object
+ON raw_snapshots(platform, resource_type, object_id, captured_at);
+"""
