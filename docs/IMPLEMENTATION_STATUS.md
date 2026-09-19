@@ -340,3 +340,42 @@ See:
 
 - [INCREMENTAL_REFRESH.md](INCREMENTAL_REFRESH.md)
 - [SCHEDULER.md](SCHEDULER.md)
+
+
+## Deployment & Storage
+
+- [x] explicit local/cloud deployment profiles
+- [x] explicit SQLite single-node boundary
+- [x] local object storage abstraction
+- [x] S3-compatible object storage backend
+- [x] media storage_backend/storage_key
+- [x] legacy local_path compatibility
+- [x] cloud media materialization for OCR
+- [x] cloud media materialization for STT
+- [x] local Docker image
+- [x] local Docker Compose
+- [x] single-node cloud Compose
+- [x] deployment capability endpoint
+- [x] database/object-storage readiness probe
+- [x] deep storage roundtrip readiness
+- [x] versioned schema_migrations
+- [x] SQLite online backup CLI
+- [x] backup/restore documentation
+- [ ] Postgres repository backend
+- [ ] multi-host durable workers
+- [ ] Kubernetes/managed-container deployment profile
+
+Supported today:
+
+```text
+Local             = SQLite + Local Storage
+Cloud single-node = SQLite + S3
+```
+
+Not yet supported:
+
+```text
+Multi-host cloud = Postgres + S3
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) and [BACKUP_RESTORE.md](BACKUP_RESTORE.md).
