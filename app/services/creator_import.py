@@ -85,6 +85,10 @@ class CreatorImportService:
                     title=note["title"],
                     post_type=note["post_type"],
                     raw=note["raw"],
+                    platform_context={
+                        "xsec_token": note["xsec_token"] or "",
+                        "xsec_source": note["xsec_source"],
+                    },
                 )
 
             cursor = page["cursor"]
