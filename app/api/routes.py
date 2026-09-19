@@ -61,6 +61,13 @@ class TranscribeVideosRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=200)
 
 
+class CreatorRefreshRequest(BaseModel):
+    max_pages: int = Field(default=3, ge=1, le=100)
+    max_recent_posts: int = Field(default=30, ge=1, le=500)
+    stop_after_unchanged_pages: int = Field(default=2, ge=1, le=20)
+    idempotency_key: str | None = Field(default=None, max_length=200)
+
+
 class CreatorPipelineRequest(BaseModel):
     max_posts: int = Field(default=20, ge=1, le=500)
     run_comments: bool = True
@@ -388,4 +395,24 @@ async def repair_job(job_id: int) -> dict[str, object]:
         "job_id": job_id,
         "repaired_job_ids": repaired,
         "repaired_count": len(repaired),
+    }
+
+
+@router.post("/creators/{creator_id}/enqueue-refresh")
+async def enqueue_creator_refresh(
+    creator_id: str,
+    payload: CreatorRefreshRequest,
+) -> dict[str, object]:
+    job_id = QueueService().enqueue_creator_refresh(
+        creator_id,
+        max_pages=payload.max_pages,
+        max_recent_posts=payload.max_recent_posts,
+        stop_after_unchanged_pages=payload.stop_after_unchanged_pages,
+        idempotency_key=payload.idempotency_key,
+    )
+    return {
+        "creator_id": creator_id,
+        "job_id": job_id,
+        "status": "WAITING",
+        "mode": "incremental_refresh",
     }
