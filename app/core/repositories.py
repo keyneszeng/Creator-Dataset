@@ -434,7 +434,7 @@ class MediaRepository:
               AND media_type IN ({placeholders})
               AND download_status='COMPLETE'
               AND is_active=1
-              AND storage_key IS NOT NULL
+              AND (storage_key IS NOT NULL OR local_path IS NOT NULL)
             ORDER BY id ASC
             LIMIT ?
         """
@@ -458,7 +458,7 @@ class MediaRepository:
                   AND media_type='video'
                   AND download_status='COMPLETE'
                   AND is_active=1
-                  AND storage_key IS NOT NULL
+                  AND (storage_key IS NOT NULL OR local_path IS NOT NULL)
                 ORDER BY id ASC
                 LIMIT ?
             """, (post_id, limit)).fetchall()
