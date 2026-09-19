@@ -1447,3 +1447,95 @@ class RefreshRunRepository:
                 status,
                 refresh_run_id,
             ))
+
+
+
+class RefreshScheduleRepository:
+    def upsert(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        interval_minutes: int,
+        max_pages: int,
+        max_recent_posts: int,
+        stop_after_unchanged_pages: int,
+        next_run_at: str,
+        enabled: bool = True,
+    ) -> int:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO refresh_schedules (
+                    platform, creator_id, interval_minutes, max_pages,
+                    max_recent_posts, stop_after_unchanged_pages,
+                    enabled, next_run_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(platform, creator_id) DO UPDATE SET
+                    interval_minutes=excluded.interval_minutes,
+                    max_pages=excluded.max_pages,
+                    max_recent_posts=excluded.max_recent_posts,
+                    stop_after_unchanged_pages=excluded.stop_after_unchanged_pages,
+                    enabled=excluded.enabled,
+                    next_run_at=excluded.next_run_at,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                platform,
+                creator_id,
+                interval_minutes,
+                max_pages,
+                max_recent_posts,
+                stop_after_unchanged_pages,
+                int(enabled),
+                next_run_at,
+            ))
+            row = connection.execute("""
+                SELECT id
+                FROM refresh_schedules
+                WHERE platform=? AND creator_id=?
+            """, (platform, creator_id)).fetchone()
+        return int(row["id"])
+
+    def due(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT *
+                FROM refresh_schedules
+                WHERE enabled=1 AND next_run_at <= CURRENT_TIMESTAMP
+                ORDER BY next_run_at ASC, id ASC
+                LIMIT ?
+            """, (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_enqueued(
+        self,
+        *,
+        schedule_id: int,
+        interval_minutes: int,
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE refresh_schedules
+                SET last_run_at=CURRENT_TIMESTAMP,
+                    next_run_at=datetime('now', ?),
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (f"+{interval_minutes} minutes", schedule_id))
+
+    def list_all(self, *, limit: int = 500) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT *
+                FROM refresh_schedules
+                ORDER BY id ASC
+                LIMIT ?
+            """, (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def set_enabled(self, *, schedule_id: int, enabled: bool) -> bool:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                UPDATE refresh_schedules
+                SET enabled=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (int(enabled), schedule_id))
+        return cursor.rowcount == 1
