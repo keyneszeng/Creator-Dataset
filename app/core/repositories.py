@@ -428,3 +428,58 @@ class ExportRepository:
             "comments": [dict(row) for row in comments],
             "media": [dict(row) for row in media],
         }
+
+
+
+class TextUnitRepository:
+    def upsert(
+        self,
+        *,
+        source_key: str,
+        platform: str,
+        post_id: str,
+        comment_id: str | None,
+        media_id: int | None,
+        unit_type: str,
+        text: str,
+        confidence: float | None,
+        provenance: str,
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO text_units (
+                    source_key, platform, post_id, comment_id, media_id,
+                    unit_type, text, confidence, provenance
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source_key) DO UPDATE SET
+                    text=excluded.text,
+                    confidence=excluded.confidence,
+                    provenance=excluded.provenance,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                source_key,
+                platform,
+                post_id,
+                comment_id,
+                media_id,
+                unit_type,
+                text,
+                confidence,
+                provenance,
+            ))
+
+    def delete_for_post(self, *, post_id: str) -> None:
+        with db_session() as connection:
+            connection.execute(
+                "DELETE FROM text_units WHERE post_id=?",
+                (post_id,),
+            )
+
+    def list_for_post(self, *, post_id: str) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT * FROM text_units
+                WHERE post_id=?
+                ORDER BY id ASC
+            """, (post_id,)).fetchall()
+        return [dict(row) for row in rows]
