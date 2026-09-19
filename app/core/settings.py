@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     deployment_mode: str = "local"
 
     data_dir: Path = Path("data")
+    database_backend: str = "sqlite"
     database_path: Path = Path("data/creator_dataset.sqlite3")
     database_url: str | None = None
 
@@ -49,6 +50,11 @@ class Settings(BaseSettings):
     def validate_deployment(self) -> "Settings":
         if self.deployment_mode not in {"local", "cloud"}:
             raise ValueError("deployment_mode must be 'local' or 'cloud'")
+        if self.database_backend != "sqlite":
+            raise ValueError(
+                "Only database_backend=sqlite is implemented in V0.x. "
+                "Postgres is reserved for the multi-node cloud milestone."
+            )
         if self.storage_backend not in {"local", "s3"}:
             raise ValueError("storage_backend must be 'local' or 's3'")
         if self.storage_backend == "s3" and not self.s3_bucket:
