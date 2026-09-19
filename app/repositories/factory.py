@@ -161,3 +161,12 @@ def create_refresh_schedule_repository(
         return RefreshScheduleRepository()
     from app.postgres.refresh import PostgresRefreshScheduleRepository
     return PostgresRefreshScheduleRepository(_database_url(settings))
+
+
+def create_validation_repository(settings: Settings | None = None) -> Any:
+    settings = _settings(settings)
+    if settings.database_backend == "sqlite":
+        from app.repositories.validation import SqliteValidationRepository
+        return SqliteValidationRepository()
+    from app.postgres.validation import PostgresValidationRepository
+    return PostgresValidationRepository(_database_url(settings))
