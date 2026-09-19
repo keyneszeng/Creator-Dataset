@@ -1,3 +1,4 @@
+import hashlib
 import json
 from typing import Any
 
@@ -991,3 +992,79 @@ class WorkerRepository:
                 WHERE heartbeat_at < datetime('now', ?)
             """, (f"-{stale_after_seconds} seconds",))
         return int(cursor.rowcount)
+
+
+
+class RawSnapshotRepository:
+    def save(
+        self,
+        *,
+        platform: str,
+        resource_type: str,
+        object_id: str,
+        cursor: str | None,
+        payload: dict[str, Any],
+    ) -> int:
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+        with db_session() as connection:
+            connection.execute("""
+                INSERT OR IGNORE INTO raw_snapshots (
+                    platform, resource_type, object_id, cursor,
+                    payload_sha256, payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                platform,
+                resource_type,
+                object_id,
+                cursor,
+                digest,
+                serialized,
+            ))
+            row = connection.execute("""
+                SELECT id
+                FROM raw_snapshots
+                WHERE platform=?
+                  AND resource_type=?
+                  AND object_id=?
+                  AND IFNULL(cursor, '')=IFNULL(?, '')
+                  AND payload_sha256=?
+            """, (
+                platform,
+                resource_type,
+                object_id,
+                cursor,
+                digest,
+            )).fetchone()
+        return int(row["id"])
+
+    def list_for_object(
+        self,
+        *,
+        platform: str,
+        resource_type: str,
+        object_id: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT id, platform, resource_type, object_id, cursor,
+                       payload_sha256, payload_json, captured_at
+                FROM raw_snapshots
+                WHERE platform=? AND resource_type=? AND object_id=?
+                ORDER BY id ASC
+                LIMIT ?
+            """, (platform, resource_type, object_id, limit)).fetchall()
+
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json"))
+            result.append(item)
+        return result
