@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # Deployment profile:
-    # - local: SQLite + local object storage
-    # - cloud: externally managed DB + object storage are expected
+    # - local: SQLite + local object storage by default
+    # - cloud: PostgreSQL + S3-compatible object storage recommended
     deployment_mode: str = "local"
 
     data_dir: Path = Path("data")
@@ -50,10 +50,13 @@ class Settings(BaseSettings):
     def validate_deployment(self) -> "Settings":
         if self.deployment_mode not in {"local", "cloud"}:
             raise ValueError("deployment_mode must be 'local' or 'cloud'")
-        if self.database_backend != "sqlite":
+        if self.database_backend not in {"sqlite", "postgres"}:
             raise ValueError(
-                "Only database_backend=sqlite is implemented in V0.x. "
-                "Postgres is reserved for the multi-node cloud milestone."
+                "database_backend must be 'sqlite' or 'postgres'"
+            )
+        if self.database_backend == "postgres" and not self.database_url:
+            raise ValueError(
+                "database_url is required when database_backend=postgres"
             )
         if self.storage_backend not in {"local", "s3"}:
             raise ValueError("storage_backend must be 'local' or 's3'")
@@ -69,9 +72,8 @@ class Settings(BaseSettings):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         if self.storage_backend == "local":
             self.storage_local_dir.mkdir(parents=True, exist_ok=True)
-        # SQLite remains the active DB backend in V0.x. A database_url is
-        # reserved for the upcoming Postgres repository implementation.
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.database_backend == "sqlite":
+            self.database_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache
