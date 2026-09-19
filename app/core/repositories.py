@@ -120,6 +120,23 @@ class PostRepository:
                 WHERE platform=? AND post_id=?
             """, (downloaded_comment_count, comment_status, platform, post_id))
 
+    def list_for_creator(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT post_id, detail_raw_json, comment_status
+                FROM posts
+                WHERE platform=? AND creator_id=?
+                ORDER BY id ASC
+                LIMIT ?
+            """, (platform, creator_id, limit)).fetchall()
+        return [dict(row) for row in rows]
+
     def count_for_creator(self, *, platform: str, creator_id: str) -> int:
         with db_session() as connection:
             row = connection.execute("""
@@ -585,3 +602,61 @@ class TextUnitRepository:
                 ORDER BY id ASC
             """, (post_id,)).fetchall()
         return [dict(row) for row in rows]
+
+
+
+class JobRepository:
+    def create(
+        self,
+        *,
+        job_type: str,
+        platform: str | None = None,
+        creator_id: str | None = None,
+        post_id: str | None = None,
+        comment_id: str | None = None,
+    ) -> int:
+        with db_session() as connection:
+            cursor = connection.execute("""
+                INSERT INTO jobs (
+                    job_type, platform, creator_id, post_id, comment_id, status
+                ) VALUES (?, ?, ?, ?, ?, 'PENDING')
+            """, (job_type, platform, creator_id, post_id, comment_id))
+            return int(cursor.lastrowid)
+
+    def mark_running(self, *, job_id: int) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE jobs
+                SET status='RUNNING', started_at=CURRENT_TIMESTAMP, last_error=NULL
+                WHERE id=?
+            """, (job_id,))
+
+    def mark_complete(self, *, job_id: int) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE jobs
+                SET status='COMPLETE', completed_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (job_id,))
+
+    def mark_failed(
+        self,
+        *,
+        job_id: int,
+        error: str,
+        status: str = "FAILED",
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE jobs
+                SET status=?, last_error=?, completed_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (status, error, job_id))
+
+    def get(self, *, job_id: int) -> dict[str, Any] | None:
+        with db_session() as connection:
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE id=?",
+                (job_id,),
+            ).fetchone()
+        return dict(row) if row else None
