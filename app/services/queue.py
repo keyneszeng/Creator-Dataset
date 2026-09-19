@@ -249,8 +249,9 @@ class QueueService:
         )
         self.jobs.mark_waiting(job_id=creator_job_id)
 
+        post_job_ids: list[int] = []
         for row in rows:
-            self.enqueue_post_stages(
+            post_job_id = self.enqueue_post_stages(
                 parent_job_id=creator_job_id,
                 creator_id=creator_id,
                 post_id=str(row["post_id"]),
@@ -261,6 +262,20 @@ class QueueService:
                 export=export,
                 include_detail=True,
                 key_prefix="stage",
+            )
+            post_job_ids.append(post_job_id)
+
+        if export:
+            self.jobs.enqueue(
+                job_type="CREATOR_EXPORT",
+                platform="xiaohongshu",
+                creator_id=creator_id,
+                parent_job_id=creator_job_id,
+                idempotency_key=f"creator-export:{creator_job_id}",
+                payload={"max_posts": max_posts},
+                priority=150,
+                max_attempts=3,
+                depends_on=post_job_ids,
             )
 
         return EnqueueCreatorResult(
