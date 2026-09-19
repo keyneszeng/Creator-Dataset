@@ -23,6 +23,7 @@ from app.services.creator_import import CreatorImportService
 from app.services.creator_export import CreatorExportService
 from app.services.export import ExportService
 from app.services.incremental_refresh import IncrementalRefreshService
+from app.services.llm_organization import LlmOrganizationService
 from app.services.media import MediaDownloadService
 from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
@@ -64,6 +65,7 @@ class DurableWorker:
             "STT": self._handle_stt,
             "VALIDATION": self._handle_validation,
             "EXPORT": self._handle_export,
+            "LLM_ORGANIZE": self._handle_llm_organize,
         }
 
     async def _handle_creator_import(self, job: dict[str, Any]) -> None:
@@ -165,6 +167,16 @@ class DurableWorker:
             raise RuntimeError(
                 "Validation failed: " + ", ".join(result.issues)
             )
+
+    async def _handle_llm_organize(self, job: dict[str, Any]) -> None:
+        payload = job.get("payload") or {}
+        run_id = payload.get("run_id")
+        if run_id is None:
+            raise ValueError("LLM organization job has no run_id.")
+        await asyncio.to_thread(
+            LlmOrganizationService().execute_run,
+            run_id=int(run_id),
+        )
 
     async def _handle_export(self, job: dict[str, Any]) -> None:
         ExportService().export_post(str(job["post_id"]))
