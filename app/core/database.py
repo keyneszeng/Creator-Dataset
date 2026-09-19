@@ -113,6 +113,25 @@ CREATE TABLE IF NOT EXISTS ocr_results (
     FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS text_units (
+    id INTEGER PRIMARY KEY,
+    source_key TEXT NOT NULL UNIQUE,
+    platform TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    comment_id TEXT,
+    media_id INTEGER,
+    unit_type TEXT NOT NULL,
+    text TEXT NOT NULL,
+    confidence REAL,
+    provenance TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_text_units_post
+ON text_units(post_id, unit_type);
+
 CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY,
     job_type TEXT NOT NULL,
