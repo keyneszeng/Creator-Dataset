@@ -1,3 +1,4 @@
+import json
 import pytest
 from mcp import Client
 
@@ -102,13 +103,12 @@ async def test_mcp_tools_are_compact_and_callable(monkeypatch) -> None:
         }
 
         account = await client.call_tool("account_status", {})
-        assert account.structured_content["free_credits"] == 5
+        account_payload = json.loads(account.content[0].text)
+        assert account_payload["free_credits"] == 5
 
         preview = await client.call_tool(
             "dataset_unlock",
             {"post_id": "post-1", "confirm": False},
         )
-        assert (
-            preview.structured_content["status"]
-            == "CONFIRMATION_REQUIRED"
-        )
+        preview_payload = json.loads(preview.content[0].text)
+        assert preview_payload["status"] == "CONFIRMATION_REQUIRED"
