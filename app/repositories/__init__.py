@@ -15,6 +15,7 @@ from app.repositories.factory import (
     create_text_unit_repository,
     create_transcript_repository,
     create_worker_repository,
+    create_validation_repository,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "create_text_unit_repository",
     "create_transcript_repository",
     "create_worker_repository",
+    "create_validation_repository",
 ]
