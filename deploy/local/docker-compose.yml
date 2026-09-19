@@ -1,0 +1,57 @@
+services:
+  api:
+    build:
+      context: ../..
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_DEPLOYMENT_MODE: local
+      CREATOR_DATASET_DATABASE_BACKEND: sqlite
+      CREATOR_DATASET_DATABASE_PATH: /app/data/creator_dataset.sqlite3
+      CREATOR_DATASET_STORAGE_BACKEND: local
+      CREATOR_DATASET_STORAGE_LOCAL_DIR: /app/data/objects
+    ports:
+      - "8000:8000"
+    volumes:
+      - creator_dataset_data:/app/data
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+    command: creator-dataset-worker
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_DEPLOYMENT_MODE: local
+      CREATOR_DATASET_DATABASE_BACKEND: sqlite
+      CREATOR_DATASET_DATABASE_PATH: /app/data/creator_dataset.sqlite3
+      CREATOR_DATASET_STORAGE_BACKEND: local
+      CREATOR_DATASET_STORAGE_LOCAL_DIR: /app/data/objects
+    volumes:
+      - creator_dataset_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  scheduler:
+    build:
+      context: ../..
+    command: creator-dataset-scheduler
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_DEPLOYMENT_MODE: local
+      CREATOR_DATASET_DATABASE_BACKEND: sqlite
+      CREATOR_DATASET_DATABASE_PATH: /app/data/creator_dataset.sqlite3
+      CREATOR_DATASET_STORAGE_BACKEND: local
+      CREATOR_DATASET_STORAGE_LOCAL_DIR: /app/data/objects
+    volumes:
+      - creator_dataset_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - api
+
+volumes:
+  creator_dataset_data:
