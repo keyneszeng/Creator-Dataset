@@ -1,18 +1,19 @@
 import asyncio
 from dataclasses import dataclass
 
-from app.core.checkpoints import CheckpointRepository
+from typing import Any
 from app.core.errors import (
     AuthenticationRequired,
     IntegrationNotInstalled,
     PlatformBlocked,
     PlatformRequestError,
 )
-from app.core.repositories import (
-    AuditRepository,
-    CommentRepository,
-    PostRepository,
-    RawSnapshotRepository,
+from app.repositories.factory import (
+    create_audit_repository,
+    create_checkpoint_repository,
+    create_comment_repository,
+    create_post_repository,
+    create_raw_snapshot_repository,
 )
 from app.platforms.xiaohongshu.comments import normalize_comment_page
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
@@ -32,18 +33,18 @@ class CommentCrawlService:
     def __init__(
         self,
         gateway: XiaohongshuGateway | None = None,
-        comments: CommentRepository | None = None,
-        posts: PostRepository | None = None,
-        checkpoints: CheckpointRepository | None = None,
-        audits: AuditRepository | None = None,
-        raw_snapshots: RawSnapshotRepository | None = None,
+        comments: Any | None = None,
+        posts: Any | None = None,
+        checkpoints: Any | None = None,
+        audits: Any | None = None,
+        raw_snapshots: Any | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
-        self.comments = comments or CommentRepository()
-        self.posts = posts or PostRepository()
-        self.checkpoints = checkpoints or CheckpointRepository()
-        self.audits = audits or AuditRepository()
-        self.raw_snapshots = raw_snapshots or RawSnapshotRepository()
+        self.comments = comments or create_comment_repository()
+        self.posts = posts or create_post_repository()
+        self.checkpoints = checkpoints or create_checkpoint_repository()
+        self.audits = audits or create_audit_repository()
+        self.raw_snapshots = raw_snapshots or create_raw_snapshot_repository()
 
     async def crawl_post(
         self,
