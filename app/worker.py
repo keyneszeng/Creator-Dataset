@@ -18,6 +18,7 @@ from app.repositories.factory import create_job_repository, create_worker_reposi
 from app.jobs.contracts import DurableJobRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
+from app.services.creator_export import CreatorExportService
 from app.services.export import ExportService
 from app.services.incremental_refresh import IncrementalRefreshService
 from app.services.media import MediaDownloadService
@@ -52,6 +53,7 @@ class DurableWorker:
         self.poll_seconds = settings.worker_poll_seconds
         self.handlers = handlers or {
             "CREATOR_DISCOVERY": self._handle_creator_discovery,
+            "CREATOR_EXPORT": self._handle_creator_export,
             "POST_DETAIL": self._handle_post_detail,
             "COMMENTS": self._handle_comments,
             "MEDIA_DOWNLOAD": self._handle_media_download,
@@ -75,6 +77,18 @@ class DurableWorker:
                 payload.get("stop_after_unchanged_pages") or 2
             ),
         )
+
+    async def _handle_creator_export(self, job: dict[str, Any]) -> None:
+        payload = job.get("payload") or {}
+        result = CreatorExportService().export_creator(
+            str(job["creator_id"]),
+            max_posts=int(payload.get("max_posts") or 10000),
+        )
+        if result["status"] != "COMPLETE":
+            raise RuntimeError(
+                f"Creator export is partial: "
+                f"{result['missing_post_exports']} Post export(s) missing."
+            )
 
     async def _handle_post_detail(self, job: dict[str, Any]) -> None:
         await PostDetailService().enrich_post(str(job["post_id"]))
