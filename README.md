@@ -141,8 +141,11 @@ pytest
 - [Stage Jobs](docs/STAGE_JOBS.md)
 - [Incremental Refresh](docs/INCREMENTAL_REFRESH.md)
 - [Refresh Scheduler](docs/SCHEDULER.md)
-- [Deployment](docs/DEPLOYMENT.md)\n- [PostgreSQL Multi-node Deployment](docs/POSTGRES_DEPLOYMENT.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [PostgreSQL Multi-node Deployment](docs/POSTGRES_DEPLOYMENT.md)
 - [Backup & Restore](docs/BACKUP_RESTORE.md)
+- [SaaS Access](docs/SAAS.md)
+- [Billing](docs/BILLING.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
@@ -379,3 +382,56 @@ docker compose -f deploy/cloud-dev/docker-compose.yml up -d --build
 ```
 
 该环境包含 PostgreSQL + MinIO + API + Worker + Scheduler，可用于在真正上云前验证多节点执行语义。
+
+
+## SaaS Access & Dataset Credits
+
+SaaS 模式已经支持：
+
+```text
+Admin
+├── 全部 Dataset
+├── 内部运维 API
+├── 用户管理
+├── API Key 管理
+├── Credits 管理
+└── Job / Repair / Scheduler 管理
+
+Member
+├── 提交 Creator
+├── 默认 5 个免费 Dataset credits
+├── Unlock Dataset
+├── 永久 entitlement
+└── 鉴权下载 Dataset artifacts
+```
+
+启用：
+
+```text
+CREATOR_DATASET_SAAS_AUTH_ENABLED=true
+CREATOR_DATASET_SAAS_BOOTSTRAP_ADMIN_KEY=<strong-secret>
+CREATOR_DATASET_SAAS_DEFAULT_FREE_DATASET_CREDITS=5
+```
+
+第一次创建 Admin：
+
+```http
+POST /api/saas/admin/users
+X-Bootstrap-Key: <strong-secret>
+```
+
+Member 解锁：
+
+```http
+POST /api/saas/datasets/{post_id}/unlock
+```
+
+前 5 个 Dataset 优先消耗 free credits；之后消耗 paid credits；余额不足返回：
+
+```text
+HTTP 402 PAYMENT_REQUIRED
+```
+
+同一 Dataset 已经解锁后永久保留 entitlement，重复访问和下载不会再次扣 credits。
+
+支付渠道目前保持 provider-neutral。Stripe/Paddle 等未来只需把经过签名验证的支付事件映射为幂等 `billing_events`，再向 paid credit ledger 入账。
