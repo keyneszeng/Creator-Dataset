@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.core.repositories import JobRepository
 from app.core.errors import (
     AuthenticationRequired,
     IntegrationNotInstalled,
@@ -298,3 +299,11 @@ async def run_creator_pipeline(
         "job_id": result.job_id,
         "status": "COMPLETE" if result.posts_failed == 0 else "PARTIAL",
     }
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(job_id: int) -> dict[str, object]:
+    job = JobRepository().get(job_id=job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
+    return job
