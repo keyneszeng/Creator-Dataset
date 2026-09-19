@@ -421,7 +421,7 @@ async def creator_import_status(
             detail={"code": "CREATOR_NOT_IN_WORKSPACE"},
         )
 
-    key = f"creator-import:{platform}:{creator_id}"
+    key = f"creator-import:v2:{platform}:{creator_id}"
     job = create_job_repository().get_by_idempotency_key(
         idempotency_key=key,
     )
