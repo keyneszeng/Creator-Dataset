@@ -69,15 +69,14 @@ def dataset_prepare(post_id: str) -> dict:
     """
     Prepare the full structured Dataset for a Post.
 
-    This capability is currently free. It never consumes credits or requires
-    payment confirmation.
+    This capability is available directly in the current personal-use mode.
     """
     return _service().dataset_prepare(post_id)
 
 
 @mcp.tool()
 def dataset_status(post_id: str) -> dict:
-    """Check whether an unlocked Dataset has finished generating."""
+    """Check whether an prepared Dataset has finished generating."""
     return _service().dataset_status(post_id)
 
 
