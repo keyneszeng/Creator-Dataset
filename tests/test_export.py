@@ -15,10 +15,13 @@ def test_export_includes_ocr_provenance(
 
     class _Settings:
         database_path = db_path
-        data_dir = data_dir
 
-    monkeypatch.setattr(database, "get_settings", lambda: _Settings())
-    monkeypatch.setattr("app.services.export.get_settings", lambda: _Settings())
+        def __init__(self) -> None:
+            self.data_dir = tmp_path / "data"
+
+    settings = _Settings()
+    monkeypatch.setattr(database, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.export.get_settings", lambda: settings)
 
     posts = PostRepository()
     posts.upsert_discovered(
