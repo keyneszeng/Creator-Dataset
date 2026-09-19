@@ -79,7 +79,7 @@ https://www.xiaohongshu.com/user/profile/<creator_id>
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -e ".[dev]"
+pip install -e ".[dev,xhs]"
 
 uvicorn app.main:app --reload
 ```
@@ -89,6 +89,22 @@ uvicorn app.main:app --reload
 ```text
 GET  /api/health
 POST /api/creators/resolve
+POST /api/creators/import
+```
+
+配置小红书登录态：
+
+```bash
+cp .env.example .env
+# 在 .env 中填写你自己的 CREATOR_DATASET_XHS_COOKIE
+```
+
+导入 Creator：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/creators/import \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://www.xiaohongshu.com/user/profile/<creator_id>","max_pages":20}'
 ```
 
 运行测试：
@@ -106,6 +122,8 @@ pytest
 - [研发路线图](docs/ROADMAP.md)
 - [开源依赖与参考项目](docs/OPEN_SOURCE_REFERENCES.md)
 - [首批研发 Backlog](docs/BACKLOG.md)
+- [认证与 Cookie 边界](docs/AUTHENTICATION.md)
+- [当前实现状态](docs/IMPLEMENTATION_STATUS.md)
 
 ## V0.1 技术建议
 
