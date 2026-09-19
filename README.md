@@ -141,7 +141,7 @@ pytest
 - [Stage Jobs](docs/STAGE_JOBS.md)
 - [Incremental Refresh](docs/INCREMENTAL_REFRESH.md)
 - [Refresh Scheduler](docs/SCHEDULER.md)
-- [Deployment](docs/DEPLOYMENT.md)
+- [Deployment](docs/DEPLOYMENT.md)\n- [PostgreSQL Multi-node Deployment](docs/POSTGRES_DEPLOYMENT.md)
 - [Backup & Restore](docs/BACKUP_RESTORE.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
@@ -358,3 +358,24 @@ creator-dataset-backup --output backups
 ```
 
 当前 **不支持多主机 Worker + SQLite**。真正的多节点云部署将在 Postgres Repository 完成后开放。
+
+
+## PostgreSQL multi-node cloud
+
+多节点 Worker 的完整条件现在是：
+
+```text
+PostgreSQL
++
+S3-compatible shared object storage
+```
+
+PostgreSQL durable queue 使用 `FOR UPDATE SKIP LOCKED`；Scheduler 使用 PostgreSQL advisory leadership lock；Repository 访问使用每进程共享连接池。
+
+本地模拟完整云拓扑：
+
+```bash
+docker compose -f deploy/cloud-dev/docker-compose.yml up -d --build
+```
+
+该环境包含 PostgreSQL + MinIO + API + Worker + Scheduler，可用于在真正上云前验证多节点执行语义。
