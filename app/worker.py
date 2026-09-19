@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import socket
 import uuid
 from collections.abc import Awaitable, Callable
@@ -12,7 +13,8 @@ from app.core.errors import (
     PlatformRequestError,
 )
 from app.core.jobs import RetryPolicy
-from app.core.repositories import JobRepository
+from app.core.logging import configure_logging
+from app.core.repositories import JobRepository, WorkerRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
 from app.services.export import ExportService
@@ -20,6 +22,8 @@ from app.services.media_pipeline import MediaPipelineService
 from app.services.post_detail import PostDetailService
 
 JobHandler = Callable[[dict[str, Any]], Awaitable[None]]
+
+logger = logging.getLogger("creator_dataset.worker")
 
 
 class DurableWorker:
@@ -36,6 +40,7 @@ class DurableWorker:
             f"{socket.gethostname()}:{uuid.uuid4().hex[:8]}"
         )
         self.jobs = jobs or JobRepository()
+        self.workers = WorkerRepository()
         self.retry_policy = retry_policy or RetryPolicy()
         self.lease_seconds = settings.worker_lease_seconds
         self.heartbeat_seconds = settings.worker_heartbeat_seconds
@@ -93,6 +98,10 @@ class DurableWorker:
                     timeout=self.heartbeat_seconds,
                 )
             except TimeoutError:
+                self.workers.touch(
+                    worker_id=self.worker_id,
+                    current_job_id=job_id,
+                )
                 ok = self.jobs.heartbeat(
                     job_id=job_id,
                     worker_id=self.worker_id,
@@ -102,7 +111,13 @@ class DurableWorker:
                     return
 
     async def run_once(self) -> bool:
-        self.jobs.recover_expired_leases()
+        self.workers.touch(worker_id=self.worker_id)
+        recovered = self.jobs.recover_expired_leases()
+        if recovered:
+            logger.warning(
+                "recovered expired job leases",
+                extra={"worker_id": self.worker_id},
+            )
 
         job = self.jobs.claim_next(
             worker_id=self.worker_id,
@@ -114,6 +129,20 @@ class DurableWorker:
         job_id = int(job["id"])
         parent_job_id = job.get("parent_job_id")
         handler = self.handlers.get(str(job["job_type"]))
+
+        self.workers.touch(
+            worker_id=self.worker_id,
+            current_job_id=job_id,
+        )
+        logger.info(
+            "job claimed",
+            extra={
+                "worker_id": self.worker_id,
+                "job_id": job_id,
+                "post_id": job.get("post_id"),
+                "creator_id": job.get("creator_id"),
+            },
+        )
 
         stop = asyncio.Event()
         heartbeat_task = asyncio.create_task(
@@ -128,8 +157,21 @@ class DurableWorker:
 
             await handler(job)
             self.jobs.mark_complete(job_id=job_id)
+            logger.info(
+                "job complete",
+                extra={
+                    "worker_id": self.worker_id,
+                    "job_id": job_id,
+                    "post_id": job.get("post_id"),
+                    "creator_id": job.get("creator_id"),
+                },
+            )
 
         except (AuthenticationRequired, PlatformBlocked) as exc:
+            logger.warning(
+                "job blocked",
+                extra={"worker_id": self.worker_id, "job_id": job_id},
+            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -137,6 +179,10 @@ class DurableWorker:
             )
 
         except IntegrationNotInstalled as exc:
+            logger.error(
+                "job integration missing",
+                extra={"worker_id": self.worker_id, "job_id": job_id},
+            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -144,6 +190,10 @@ class DurableWorker:
             )
 
         except ValueError as exc:
+            logger.error(
+                "job failed permanently",
+                extra={"worker_id": self.worker_id, "job_id": job_id},
+            )
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
@@ -159,6 +209,7 @@ class DurableWorker:
         finally:
             stop.set()
             await heartbeat_task
+            self.workers.clear_job(worker_id=self.worker_id)
             if parent_job_id:
                 self.jobs.reconcile_parent(
                     parent_job_id=int(parent_job_id)
@@ -167,6 +218,15 @@ class DurableWorker:
         return True
 
     def _retry(self, job: dict[str, Any], exc: Exception) -> None:
+        logger.warning(
+            "job scheduled for retry",
+            extra={
+                "worker_id": self.worker_id,
+                "job_id": int(job["id"]),
+                "post_id": job.get("post_id"),
+                "creator_id": job.get("creator_id"),
+            },
+        )
         retry_at = self.retry_policy.next_retry_at(
             int(job.get("attempt") or 1)
         )
@@ -186,6 +246,7 @@ class DurableWorker:
 
 
 def main() -> None:
+    configure_logging()
     asyncio.run(DurableWorker().run_forever())
 
 
