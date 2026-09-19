@@ -145,3 +145,10 @@ class SaasRepository(Protocol):
         currency: str | None,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]: ...
+
+    def list_billing_events(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]: ...
