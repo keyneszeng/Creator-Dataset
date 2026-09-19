@@ -804,6 +804,45 @@ class JobRepository:
                 WHERE id=?
             """, (job_id,))
 
+    def mark_waiting(self, *, job_id: int) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE jobs
+                SET status='WAITING',
+                    lease_owner=NULL,
+                    lease_expires_at=NULL,
+                    heartbeat_at=NULL
+                WHERE id=?
+            """, (job_id,))
+
+    def reconcile_parent(self, *, parent_job_id: int) -> dict[str, int]:
+        summary = self.children_summary(parent_job_id=parent_job_id)
+        total = summary.get("TOTAL", 0)
+        if total == 0:
+            return summary
+
+        terminal = (
+            summary.get("COMPLETE", 0)
+            + summary.get("PARTIAL", 0)
+            + summary.get("FAILED", 0)
+            + summary.get("BLOCKED", 0)
+        )
+        if terminal < total:
+            return summary
+
+        if summary.get("FAILED", 0) or summary.get("PARTIAL", 0) or summary.get("BLOCKED", 0):
+            self.mark_failed(
+                job_id=parent_job_id,
+                error=(
+                    f"Child jobs finished with partial results: "
+                    f"{summary}"
+                ),
+                status="PARTIAL",
+            )
+        else:
+            self.mark_complete(job_id=parent_job_id)
+        return summary
+
     def mark_complete(self, *, job_id: int) -> None:
         with db_session() as connection:
             connection.execute("""
