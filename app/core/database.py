@@ -254,6 +254,25 @@ CREATE TABLE IF NOT EXISTS refresh_runs (
     completed_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS refresh_schedules (
+    id INTEGER PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    interval_minutes INTEGER NOT NULL,
+    max_pages INTEGER NOT NULL DEFAULT 3,
+    max_recent_posts INTEGER NOT NULL DEFAULT 30,
+    stop_after_unchanged_pages INTEGER NOT NULL DEFAULT 2,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    next_run_at DATETIME NOT NULL,
+    last_run_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, creator_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_schedules_due
+ON refresh_schedules(enabled, next_run_at);
+
 CREATE TABLE IF NOT EXISTS raw_snapshots (
     id INTEGER PRIMARY KEY,
     platform TEXT NOT NULL,
