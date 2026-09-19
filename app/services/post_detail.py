@@ -60,13 +60,15 @@ class PostDetailService:
             media_registered += 1
         return media_registered
 
-    async def enrich_post(self, post_id: str) -> int:
+    async def enrich_post(self, post_id: str, *, force: bool = False) -> int:
         row = self.posts.get_access_context(
             platform="xiaohongshu",
             post_id=post_id,
         )
         if row is None:
             raise ValueError(f"Unknown post: {post_id}")
+        if row.get("has_detail") and not force:
+            return 0
         return await self._enrich_row(row)
 
     async def enrich_creator(
