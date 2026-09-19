@@ -20,7 +20,7 @@
       "interface": {
         "displayName": "Creator Dataset",
         "shortDescription": "Research public Creators from ChatGPT.",
-        "longDescription": "Import public Creator profiles, browse their Posts, unlock selected structured Datasets, and let ChatGPT analyze author content, OCR, transcripts, comments, and replies."
+        "longDescription": "Import public Creator profiles, prepare structured Datasets for free, and let ChatGPT analyze author content, OCR, transcripts, comments, and replies."
       }
     }
   }
