@@ -141,6 +141,8 @@ pytest
 - [Stage Jobs](docs/STAGE_JOBS.md)
 - [Incremental Refresh](docs/INCREMENTAL_REFRESH.md)
 - [Refresh Scheduler](docs/SCHEDULER.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Backup & Restore](docs/BACKUP_RESTORE.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
@@ -310,3 +312,49 @@ comments_changed
 ```
 
 并只 fan-out 需要的 Stage Jobs。评论变化会主动失效旧评论 checkpoint；媒体变化会通过 `is_active` 对当前媒体版本进行 reconciliation。
+
+
+## Local / Cloud 部署
+
+当前明确支持：
+
+```text
+Local:
+SQLite + Local Object Store
+
+Cloud single-node:
+SQLite + S3-compatible Object Store
+```
+
+本地 Docker：
+
+```bash
+cp .env.example .env
+docker compose -f deploy/local/docker-compose.yml up -d --build
+```
+
+云端单节点：
+
+```text
+deploy/cloud-single-node/docker-compose.yml
+```
+
+对象存储支持本地和 S3-compatible backend。OCR/STT 会通过 storage abstraction 自动 materialize 文件，因此云端 Worker 不要求共享媒体磁盘。
+
+部署自检：
+
+```text
+GET /api/system/capabilities
+GET /api/system/readiness
+GET /api/system/readiness?deep_storage=true
+```
+
+数据库升级已经使用 `schema_migrations` 记录版本。
+
+安全备份：
+
+```bash
+creator-dataset-backup --output backups
+```
+
+当前 **不支持多主机 Worker + SQLite**。真正的多节点云部署将在 Postgres Repository 完成后开放。
