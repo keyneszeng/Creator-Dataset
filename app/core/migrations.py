@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 Migration = Callable[[sqlite3.Connection], None]
 
@@ -233,6 +233,52 @@ def migration_007_billing_events(connection: sqlite3.Connection) -> None:
     """)
 
 
+def migration_008_payment_orders(connection: sqlite3.Connection) -> None:
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS payment_orders (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            payment_method TEXT NOT NULL,
+            merchant_order_no TEXT NOT NULL,
+            provider_order_id TEXT,
+            product_code TEXT NOT NULL,
+            credits INTEGER NOT NULL,
+            amount_minor INTEGER NOT NULL,
+            currency TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'created',
+            client_context_json TEXT,
+            expires_at DATETIME,
+            paid_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, merchant_order_no),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_payment_orders_user
+        ON payment_orders(user_id, created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_payment_orders_provider_status
+        ON payment_orders(provider, status, created_at);
+
+        CREATE TABLE IF NOT EXISTS payment_identities (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            application_id TEXT NOT NULL,
+            subject_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(provider, application_id, subject_id),
+            UNIQUE(user_id, provider, application_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_payment_identities_user
+        ON payment_identities(user_id, provider);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_post_detail_context),
     (2, migration_002_incremental_refresh),
@@ -241,6 +287,7 @@ MIGRATIONS: list[tuple[int, Migration]] = [
     (5, migration_005_saas_access),
     (6, migration_006_dataset_artifacts),
     (7, migration_007_billing_events),
+    (8, migration_008_payment_orders),
 ]
 
 
