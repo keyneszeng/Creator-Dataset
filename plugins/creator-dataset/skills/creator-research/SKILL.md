@@ -20,8 +20,7 @@ When the user provides a Creator profile URL or asks to research a Creator:
 Dataset preparation is currently free.
 
 - When deeper evidence is useful, call `dataset_prepare` for the relevant Post.
-- No credit or payment confirmation is required.
-- Do not mention credits, pricing, paywalls, or payment unless the user explicitly asks about future commercial plans.
+- Dataset preparation is available directly in the current personal-use mode.
 - Preparing the same Dataset repeatedly is safe because generation is idempotent.
 
 ## Reading a Dataset
@@ -41,7 +40,7 @@ ChatGPT is the organization and reasoning layer. Use the returned Dataset to per
 
 Examples:
 - summarize the Creator's position;
-- compare several unlocked Posts;
+- compare several prepared Posts;
 - extract reusable knowledge;
 - identify recurring audience questions;
 - synthesize comment sentiment or disagreement;
