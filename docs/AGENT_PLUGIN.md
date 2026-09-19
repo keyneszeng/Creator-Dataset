@@ -71,17 +71,22 @@ Install the Agent extra:
 pip install -e ".[agent,xhs,ocr,stt]"
 ```
 
-Start the normal Worker:
+Recommended local startup:
 
 ```bash
-creator-dataset-worker
+creator-dataset-agent --check
+creator-dataset-agent
 ```
 
-Then start the MCP server:
+The first command validates the personal-use configuration. The second runs the Worker and MCP server together.
+
+Optional incremental refresh scheduler:
 
 ```bash
-creator-dataset-mcp
+creator-dataset-agent --with-scheduler
 ```
+
+For debugging, Worker and MCP can still be started separately.
 
 Default endpoint:
 
