@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     postgres_pool_min_size: int = 1
     postgres_pool_max_size: int = 10
 
+    # SaaS access control. Local development can keep this disabled.
+    saas_auth_enabled: bool = False
+    saas_bootstrap_admin_key: str = ""
+    saas_default_free_dataset_credits: int = 5
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
