@@ -26,6 +26,9 @@ ocr = [
 stt = [
   "faster-whisper>=1.2,<2.0",
 ]
+cloud = [
+  "boto3>=1.35,<2.0",
+]
 
 [project.scripts]
 creator-dataset-worker = "app.worker:main"
