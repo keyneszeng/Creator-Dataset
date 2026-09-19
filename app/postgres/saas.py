@@ -604,3 +604,30 @@ class PostgresSaasRepository:
                 )
                 rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+
+    def list_billing_events(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT *
+                    FROM billing_events
+                    WHERE user_id=%s
+                    ORDER BY id DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit),
+                )
+                rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = item.pop("payload_json") or {}
+            result.append(item)
+        return result
