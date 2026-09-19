@@ -8,7 +8,7 @@ from app.postgres.schema import (
     POSTGRES_REFRESH_SCHEMA,
 )
 
-POSTGRES_SCHEMA_VERSION = 5
+POSTGRES_SCHEMA_VERSION = 6
 POSTGRES_MIGRATION_LOCK_KEY = 48392178
 
 Migration = Callable[[Any], None]
@@ -152,12 +152,57 @@ def migration_005_billing_events(cursor) -> None:
     """)
 
 
+def migration_006_payment_orders(cursor) -> None:
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payment_orders (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            payment_method TEXT NOT NULL,
+            merchant_order_no TEXT NOT NULL,
+            provider_order_id TEXT,
+            product_code TEXT NOT NULL,
+            credits INTEGER NOT NULL,
+            amount_minor BIGINT NOT NULL,
+            currency TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'created',
+            client_context_json JSONB,
+            expires_at TIMESTAMPTZ,
+            paid_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(provider, merchant_order_no)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_payment_orders_user
+        ON payment_orders(user_id, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_payment_orders_provider_status
+        ON payment_orders(provider, status, created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS payment_identities (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            application_id TEXT NOT NULL,
+            subject_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(provider, application_id, subject_id),
+            UNIQUE(user_id, provider, application_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_payment_identities_user
+        ON payment_identities(user_id, provider);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_bootstrap),
     (2, migration_002_cloud_runtime_indexes),
     (3, migration_003_saas_access),
     (4, migration_004_dataset_artifacts),
     (5, migration_005_billing_events),
+    (6, migration_006_payment_orders),
 ]
 
 
