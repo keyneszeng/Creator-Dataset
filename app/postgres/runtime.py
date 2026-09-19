@@ -107,3 +107,65 @@ class PostgresSharedRateLimiter:
                 """, (next_allowed, self.key))
 
         return max(slot - now, 0.0)
+
+
+
+class PostgresSchedulerLock:
+    """Session-scoped PostgreSQL advisory lock for scheduler leadership."""
+
+    def __init__(
+        self,
+        *,
+        database_url: str,
+        lock_key: int = 48392177,
+    ) -> None:
+        self.jobs = PostgresJobRepository(database_url)
+        self.lock_key = lock_key
+        self._connection = None
+
+    def try_acquire(self) -> bool:
+        if self._connection is not None:
+            return True
+
+        connection = self.jobs._connect()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT pg_try_advisory_lock(%s) AS acquired",
+                (self.lock_key,),
+            )
+            acquired = bool(cursor.fetchone()["acquired"])
+            if not acquired:
+                cursor.close()
+                connection.close()
+                return False
+            cursor.close()
+            self._connection = connection
+            return True
+        except Exception:
+            cursor.close()
+            connection.close()
+            raise
+
+    def release(self) -> None:
+        if self._connection is None:
+            return
+
+        connection = self._connection
+        self._connection = None
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_advisory_unlock(%s)",
+                    (self.lock_key,),
+                )
+        finally:
+            connection.close()
+
+    def __enter__(self):
+        if not self.try_acquire():
+            return None
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.release()
