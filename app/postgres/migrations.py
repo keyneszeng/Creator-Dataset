@@ -8,7 +8,7 @@ from app.postgres.schema import (
     POSTGRES_REFRESH_SCHEMA,
 )
 
-POSTGRES_SCHEMA_VERSION = 2
+POSTGRES_SCHEMA_VERSION = 3
 POSTGRES_MIGRATION_LOCK_KEY = 48392178
 
 Migration = Callable[[Any], None]
@@ -43,9 +43,77 @@ def migration_002_cloud_runtime_indexes(cursor) -> None:
     """)
 
 
+def migration_003_saas_access(cursor) -> None:
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id BIGSERIAL PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            role TEXT NOT NULL DEFAULT 'member',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            key_prefix TEXT NOT NULL,
+            key_hash TEXT NOT NULL UNIQUE,
+            last_used_at TIMESTAMPTZ,
+            revoked_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_api_keys_user
+        ON api_keys(user_id, revoked_at);
+
+        CREATE TABLE IF NOT EXISTS credit_ledger (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            bucket TEXT NOT NULL,
+            delta INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            reference_id TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_bucket
+        ON credit_ledger(user_id, bucket, id);
+
+        CREATE TABLE IF NOT EXISTS dataset_entitlements (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            platform TEXT NOT NULL,
+            post_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ,
+            UNIQUE(user_id, platform, post_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_entitlements_user
+        ON dataset_entitlements(user_id, granted_at DESC);
+
+        CREATE TABLE IF NOT EXISTS creator_submissions (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            platform TEXT NOT NULL,
+            creator_id TEXT NOT NULL,
+            submitted_url TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_creator_submissions_user
+        ON creator_submissions(user_id, created_at DESC);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_bootstrap),
     (2, migration_002_cloud_runtime_indexes),
+    (3, migration_003_saas_access),
 ]
 
 
