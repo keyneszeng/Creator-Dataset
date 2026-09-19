@@ -2,6 +2,12 @@ import asyncio
 from dataclasses import dataclass
 
 from app.core.checkpoints import CheckpointRepository
+from app.core.errors import (
+    AuthenticationRequired,
+    IntegrationNotInstalled,
+    PlatformBlocked,
+    PlatformRequestError,
+)
 from app.core.repositories import AuditRepository, CommentRepository, PostRepository
 from app.platforms.xiaohongshu.comments import normalize_comment_page
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
@@ -137,6 +143,13 @@ class CommentCrawlService:
                     pages += 1
                     if page["has_more"] and not cursor:
                         break
+            except (
+                AuthenticationRequired,
+                IntegrationNotInstalled,
+                PlatformBlocked,
+                PlatformRequestError,
+            ):
+                raise
             except Exception:
                 failed_threads += 1
                 continue
