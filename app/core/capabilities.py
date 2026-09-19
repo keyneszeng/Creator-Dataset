@@ -19,7 +19,8 @@ def deployment_capabilities() -> dict[str, Any]:
             "local",
             "s3",
         },
-        "postgres_ready": True,
+        "postgres_supported": True,
+        "postgres_ready": postgres,
         "recommended_multi_host_storage": "s3",
         "notes": (
             "SQLite is intended for local and single-node deployments. "
