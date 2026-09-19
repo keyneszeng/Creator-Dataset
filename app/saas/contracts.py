@@ -74,6 +74,31 @@ class SaasRepository(Protocol):
         limit: int = 100,
     ) -> list[dict[str, Any]]: ...
 
+    def entitled_post_ids(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_ids: list[str],
+        is_admin: bool,
+    ) -> set[str]: ...
+
+    def has_creator_submission(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        creator_id: str,
+        is_admin: bool,
+    ) -> bool: ...
+
+    def list_creator_submissions(
+        self,
+        *,
+        user_id: int,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]: ...
+
     def list_users(
         self,
         *,
