@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 Migration = Callable[[sqlite3.Connection], None]
 
@@ -279,6 +279,52 @@ def migration_008_payment_orders(connection: sqlite3.Connection) -> None:
     """)
 
 
+def migration_009_llm_organization(connection: sqlite3.Connection) -> None:
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS llm_connections (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            label TEXT NOT NULL,
+            model TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            secret_ciphertext TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, label),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_llm_connections_user
+        ON llm_connections(user_id, enabled);
+
+        CREATE TABLE IF NOT EXISTS llm_organization_runs (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            post_id TEXT NOT NULL,
+            connection_id INTEGER NOT NULL,
+            task TEXT NOT NULL,
+            custom_instruction TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            input_schema_version TEXT NOT NULL,
+            result_json TEXT,
+            error TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            started_at DATETIME,
+            completed_at DATETIME,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(connection_id) REFERENCES llm_connections(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_llm_runs_user_post
+        ON llm_organization_runs(user_id, post_id, id);
+
+        CREATE INDEX IF NOT EXISTS idx_llm_runs_status
+        ON llm_organization_runs(status, created_at);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_post_detail_context),
     (2, migration_002_incremental_refresh),
@@ -288,6 +334,7 @@ MIGRATIONS: list[tuple[int, Migration]] = [
     (6, migration_006_dataset_artifacts),
     (7, migration_007_billing_events),
     (8, migration_008_payment_orders),
+    (9, migration_009_llm_organization),
 ]
 
 
