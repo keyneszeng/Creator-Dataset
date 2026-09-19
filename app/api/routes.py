@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.core.capabilities import deployment_capabilities
+from app.core.readiness import check_readiness
 from app.core.repositories import (
     ChangeEventRepository,
     JobRepository,
@@ -550,3 +551,13 @@ async def get_creator_changes(
 @router.get("/system/capabilities")
 async def system_capabilities() -> dict[str, object]:
     return deployment_capabilities()
+
+
+@router.get("/system/readiness")
+async def system_readiness(
+    deep_storage: bool = False,
+) -> dict[str, object]:
+    result = check_readiness(deep_storage=deep_storage)
+    if not result["ready"]:
+        raise HTTPException(status_code=503, detail=result)
+    return result
