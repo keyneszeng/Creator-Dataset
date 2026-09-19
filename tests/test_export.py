@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from app.core import database
@@ -74,3 +75,11 @@ def test_export_includes_ocr_provenance(
     assert "Author body" in markdown
     assert "图片里的知识" in markdown
     assert f"Media {media_id}" in markdown
+
+
+    manifest = json.loads(
+        Path(result["manifest_json"]).read_text(encoding="utf-8")
+    )
+    assert manifest["dataset_schema_version"] == "0.2.0"
+    assert manifest["post_id"] == "post-1"
+    assert manifest["files"]["analysis.jsonl"]["sha256"]
