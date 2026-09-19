@@ -27,6 +27,9 @@ stt = [
   "faster-whisper>=1.2,<2.0",
 ]
 
+[project.scripts]
+creator-dataset-worker = "app.worker:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
