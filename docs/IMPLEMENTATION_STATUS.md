@@ -230,3 +230,47 @@ Endpoint:
 ```text
 POST /api/creators/{creator_id}/run-pipeline
 ```
+
+
+## Long-running Reliability
+
+- [x] SQLite WAL
+- [x] busy timeout
+- [x] durable PENDING/RETRY queue
+- [x] atomic Worker claim
+- [x] Worker lease
+- [x] heartbeat
+- [x] expired lease recovery
+- [x] exponential backoff + jitter
+- [x] max attempts
+- [x] parent/child Jobs
+- [x] explicit WAITING parent state
+- [x] idempotency keys
+- [x] repeated Creator runs
+- [x] queue/Worker observability
+- [x] JSON structured logs
+- [x] shared cross-Worker platform request pacing
+- [x] raw API response snapshots
+- [x] dataset schema version metadata
+- [x] export manifest + SHA256 checksums
+
+Production-default endpoint:
+
+```text
+POST /api/creators/{creator_id}/enqueue-pipeline
+```
+
+Worker:
+
+```bash
+creator-dataset-worker
+```
+
+Monitoring:
+
+```text
+GET /api/system/status
+GET /api/jobs/{job_id}/progress
+```
+
+See [RELIABILITY_ARCHITECTURE.md](RELIABILITY_ARCHITECTURE.md).
