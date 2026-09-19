@@ -1,8 +1,13 @@
 from dataclasses import dataclass
 from uuid import uuid4
 
-from app.core.repositories import JobRepository, PostRepository
+from typing import Any
+
 from app.jobs.contracts import DurableJobRepository
+from app.repositories.factory import (
+    create_job_repository,
+    create_post_repository,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,10 +22,10 @@ class QueueService:
         self,
         *,
         jobs: DurableJobRepository | None = None,
-        posts: PostRepository | None = None,
+        posts: Any | None = None,
     ) -> None:
-        self.jobs = jobs or JobRepository()
-        self.posts = posts or PostRepository()
+        self.jobs = jobs or create_job_repository()
+        self.posts = posts or create_post_repository()
 
     def enqueue_post_stages(
         self,
