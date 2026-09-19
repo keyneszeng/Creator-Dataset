@@ -9,7 +9,9 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
-from app.core.repositories import MediaRepository
+from typing import Any
+
+from app.repositories.factory import create_media_repository
 from app.storage.base import ObjectStore
 from app.storage.factory import create_object_store
 
@@ -100,12 +102,12 @@ class MediaDownloadService:
     def __init__(
         self,
         *,
-        repository: MediaRepository | None = None,
+        repository: Any | None = None,
         object_store: ObjectStore | None = None,
         max_bytes: int = 250 * 1024 * 1024,
         max_redirects: int = 5,
     ) -> None:
-        self.repository = repository or MediaRepository()
+        self.repository = repository or create_media_repository()
         self.object_store = object_store or create_object_store()
         self.max_bytes = max_bytes
         self.max_redirects = max_redirects
