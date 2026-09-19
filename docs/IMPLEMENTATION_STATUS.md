@@ -274,3 +274,31 @@ GET /api/jobs/{job_id}/progress
 ```
 
 See [RELIABILITY_ARCHITECTURE.md](RELIABILITY_ARCHITECTURE.md).
+
+
+## Stage-level Jobs
+
+- [x] job_dependencies DAG
+- [x] POST_DETAIL stage
+- [x] COMMENTS stage
+- [x] MEDIA_DOWNLOAD stage
+- [x] OCR stage
+- [x] STT stage
+- [x] VALIDATION gate
+- [x] EXPORT stage
+- [x] dependency-aware claiming
+- [x] failed dependency propagation
+- [x] nested Creator → Post → Stage parents
+- [x] ancestor reconciliation
+- [x] Job tree API
+- [x] targeted repair subgraph
+- [x] repair reopens ancestors to WAITING
+
+Endpoints:
+
+```text
+GET  /api/jobs/{job_id}/tree
+POST /api/jobs/{job_id}/repair
+```
+
+See [STAGE_JOBS.md](STAGE_JOBS.md).
