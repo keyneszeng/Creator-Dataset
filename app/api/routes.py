@@ -11,6 +11,7 @@ from app.platforms.xiaohongshu import XiaohongshuAdapter
 from app.platforms.xiaohongshu.resolver import InvalidCreatorUrl
 from app.services.comment_crawl import CommentCrawlService
 from app.services.creator_import import CreatorImportService
+from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
 
 router = APIRouter()
@@ -33,6 +34,12 @@ class EnrichPostsRequest(BaseModel):
 class CrawlCommentsRequest(BaseModel):
     max_root_pages: int = Field(default=200, ge=1, le=1000)
     max_reply_pages: int = Field(default=200, ge=1, le=1000)
+
+
+class OcrImagesRequest(BaseModel):
+    include_comment_images: bool = True
+    only_missing: bool = True
+    limit: int = Field(default=200, ge=1, le=2000)
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -159,3 +166,23 @@ async def crawl_comments(
         "status": result.status,
         "completeness_ratio": result.completeness_ratio,
     }
+
+
+@router.post("/posts/{post_id}/ocr-images")
+async def ocr_images(
+    post_id: str,
+    payload: OcrImagesRequest,
+) -> dict[str, int]:
+    try:
+        service = OcrService()
+        return await service.process_post_images(
+            post_id,
+            include_comment_images=payload.include_comment_images,
+            only_missing=payload.only_missing,
+            limit=payload.limit,
+        )
+    except IntegrationNotInstalled as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "OCR_INTEGRATION_NOT_INSTALLED", "message": str(exc)},
+        ) from exc
