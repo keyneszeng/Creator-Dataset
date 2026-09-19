@@ -2,10 +2,10 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from app.core.repositories import (
-    ChangeEventRepository,
-    MediaRepository,
-    PostRepository,
+from app.repositories.factory import (
+    create_change_event_repository,
+    create_media_repository,
+    create_post_repository,
 )
 from app.platforms.xiaohongshu.gateway import XiaohongshuGateway
 from app.platforms.xiaohongshu.normalizers import normalize_post_detail
@@ -23,14 +23,14 @@ class PostDetailService:
     def __init__(
         self,
         gateway: XiaohongshuGateway | None = None,
-        post_repository: PostRepository | None = None,
-        media_repository: MediaRepository | None = None,
-        change_events: ChangeEventRepository | None = None,
+        post_repository: Any | None = None,
+        media_repository: Any | None = None,
+        change_events: Any | None = None,
     ) -> None:
         self.gateway = gateway or XiaohongshuGateway()
-        self.posts = post_repository or PostRepository()
-        self.media = media_repository or MediaRepository()
-        self.change_events = change_events or ChangeEventRepository()
+        self.posts = post_repository or create_post_repository()
+        self.media = media_repository or create_media_repository()
+        self.change_events = change_events or create_change_event_repository()
 
     async def _enrich_row(self, row: dict) -> tuple[int, dict[str, bool]]:
         context = row["platform_context"]
