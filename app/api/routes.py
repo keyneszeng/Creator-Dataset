@@ -5,12 +5,12 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from app.core.capabilities import deployment_capabilities
 from app.core.readiness import check_readiness
-from app.core.repositories import (
-    ChangeEventRepository,
-    JobRepository,
-    RefreshRunRepository,
-    RefreshScheduleRepository,
-    WorkerRepository,
+from app.repositories.factory import (
+    create_change_event_repository,
+    create_job_repository,
+    create_refresh_run_repository,
+    create_refresh_schedule_repository,
+    create_worker_repository,
 )
 from app.core.errors import (
     AuthenticationRequired,
@@ -330,7 +330,7 @@ async def run_creator_pipeline(
 
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: int) -> dict[str, object]:
-    job = JobRepository().get(job_id=job_id)
+    job = create_job_repository().get(job_id=job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
     return job
@@ -365,7 +365,7 @@ async def enqueue_creator_pipeline(
 
 @router.get("/jobs/{job_id}/progress")
 async def get_job_progress(job_id: int) -> dict[str, object]:
-    repository = JobRepository()
+    repository = create_job_repository()
     job = repository.get(job_id=job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job: {job_id}")
@@ -377,8 +377,8 @@ async def get_job_progress(job_id: int) -> dict[str, object]:
 
 @router.get("/system/status")
 async def system_status() -> dict[str, object]:
-    jobs = JobRepository()
-    workers = WorkerRepository()
+    jobs = create_job_repository()
+    workers = create_worker_repository()
     active_workers = workers.active()
     return {
         "queue": jobs.queue_summary(),
@@ -386,7 +386,7 @@ async def system_status() -> dict[str, object]:
             "active": len(active_workers),
             "items": active_workers,
         },
-        "refresh_scheduler": RefreshScheduleRepository().due_summary(),
+        "refresh_scheduler": create_refresh_schedule_repository().due_summary(),
     }
 
 
@@ -443,7 +443,7 @@ async def upsert_refresh_schedule(
     payload: RefreshScheduleRequest,
 ) -> dict[str, object]:
     next_run_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    repository = RefreshScheduleRepository()
+    repository = create_refresh_schedule_repository()
     schedule_id = repository.upsert(
         platform="xiaohongshu",
         creator_id=creator_id,
@@ -479,7 +479,7 @@ async def upsert_refresh_schedule(
 
 @router.get("/refresh-schedules")
 async def list_refresh_schedules() -> dict[str, object]:
-    items = RefreshScheduleRepository().list_all()
+    items = create_refresh_schedule_repository().list_all()
     return {
         "count": len(items),
         "items": items,
@@ -488,7 +488,7 @@ async def list_refresh_schedules() -> dict[str, object]:
 
 @router.post("/refresh-schedules/{schedule_id}/pause")
 async def pause_refresh_schedule(schedule_id: int) -> dict[str, object]:
-    updated = RefreshScheduleRepository().set_enabled(
+    updated = create_refresh_schedule_repository().set_enabled(
         schedule_id=schedule_id,
         enabled=False,
     )
@@ -519,7 +519,7 @@ async def get_refresh_history(
     creator_id: str,
     limit: int = 100,
 ) -> dict[str, object]:
-    items = RefreshRunRepository().list_for_creator(
+    items = create_refresh_run_repository().list_for_creator(
         platform="xiaohongshu",
         creator_id=creator_id,
         limit=max(1, min(limit, 500)),
@@ -536,7 +536,7 @@ async def get_creator_changes(
     creator_id: str,
     limit: int = 200,
 ) -> dict[str, object]:
-    items = ChangeEventRepository().list_for_creator(
+    items = create_change_event_repository().list_for_creator(
         platform="xiaohongshu",
         creator_id=creator_id,
         limit=max(1, min(limit, 1000)),
