@@ -72,6 +72,36 @@ def check_readiness(*, deep_storage: bool = False) -> dict[str, object]:
     }
     ready = ready and saas_auth_ok
 
+    llm_key_ok = (
+        (not settings.llm_enabled)
+        or bool(settings.llm_credential_encryption_key)
+    )
+    llm_host_ok = (
+        (not settings.llm_enabled)
+        or settings.deployment_mode == "local"
+        or bool(settings.llm_allowed_hosts.strip())
+    )
+    llm_ok = llm_key_ok and llm_host_ok
+    checks["llm_security"] = {
+        "ok": llm_ok,
+        "enabled": bool(settings.llm_enabled),
+        "credential_encryption_key_configured": bool(
+            settings.llm_credential_encryption_key
+        ),
+        "allowed_hosts_configured": bool(
+            settings.llm_allowed_hosts.strip()
+        ),
+        "message": (
+            "LLM configuration is acceptable."
+            if llm_ok
+            else (
+                "Enabled LLM support requires a credential encryption key "
+                "and cloud deployments require an endpoint allow-list."
+            )
+        ),
+    }
+    ready = ready and llm_ok
+
     checks["storage"] = {
         "ok": True,
         "backend": settings.storage_backend,
