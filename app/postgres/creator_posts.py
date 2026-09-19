@@ -354,7 +354,7 @@ class PostgresPostRepository(_PostgresBase):
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("""
-                    SELECT post_id, reported_comment_count,
+                    SELECT post_id, creator_id, reported_comment_count,
                            platform_context_json, detail_raw_json
                     FROM posts
                     WHERE platform=%s AND post_id=%s
@@ -365,6 +365,7 @@ class PostgresPostRepository(_PostgresBase):
             return None
         return {
             "post_id": row["post_id"],
+            "creator_id": row["creator_id"],
             "reported_comment_count": row["reported_comment_count"],
             "has_detail": row["detail_raw_json"] is not None,
             "platform_context": row["platform_context_json"] or {},
