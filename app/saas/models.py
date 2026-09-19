@@ -16,6 +16,7 @@ class EntitlementSource(StrEnum):
     FREE_CREDIT = "free_credit"
     PAID_CREDIT = "paid_credit"
     ADMIN_GRANT = "admin_grant"
+    FREE_MODE = "free_mode"
 
 
 @dataclass(frozen=True, slots=True)
