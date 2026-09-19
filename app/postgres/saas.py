@@ -524,3 +524,83 @@ class PostgresSaasRepository:
             "applied": applied,
             "credits": balances,
         }
+
+
+    def entitled_post_ids(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_ids: list[str],
+        is_admin: bool,
+    ) -> set[str]:
+        if is_admin:
+            return set(post_ids)
+        if not post_ids:
+            return set()
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT post_id
+                    FROM dataset_entitlements
+                    WHERE user_id=%s AND platform=%s
+                      AND post_id = ANY(%s)
+                      AND (expires_at IS NULL OR expires_at > NOW())
+                    """,
+                    (user_id, platform, post_ids),
+                )
+                rows = cursor.fetchall()
+        return {str(row["post_id"]) for row in rows}
+
+    def has_creator_submission(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        creator_id: str,
+        is_admin: bool,
+    ) -> bool:
+        if is_admin:
+            return True
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM creator_submissions
+                    WHERE user_id=%s AND platform=%s AND creator_id=%s
+                    LIMIT 1
+                    """,
+                    (user_id, platform, creator_id),
+                )
+                row = cursor.fetchone()
+        return row is not None
+
+    def list_creator_submissions(
+        self,
+        *,
+        user_id: int,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        platform,
+                        creator_id,
+                        MAX(submitted_url) AS submitted_url,
+                        MAX(created_at) AS last_submitted_at,
+                        COUNT(*) AS submit_count
+                    FROM creator_submissions
+                    WHERE user_id=%s
+                    GROUP BY platform, creator_id
+                    ORDER BY last_submitted_at DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit),
+                )
+                rows = cursor.fetchall()
+        return [dict(row) for row in rows]
