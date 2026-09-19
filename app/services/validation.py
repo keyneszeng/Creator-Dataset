@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from typing import Any
 
-from app.core.database import db_session
+from app.repositories.factory import create_validation_repository
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,6 +12,9 @@ class ValidationResult:
 
 
 class ValidationService:
+    def __init__(self, repository: Any | None = None) -> None:
+        self.repository = repository or create_validation_repository()
+
     def validate_post(
         self,
         post_id: str,
@@ -20,78 +24,38 @@ class ValidationService:
         require_ocr: bool = True,
         require_stt: bool = True,
     ) -> ValidationResult:
+        state = self.repository.inspect_post(post_id=post_id)
+        if state is None:
+            return ValidationResult(
+                post_id=post_id,
+                complete=False,
+                issues=["post_not_found"],
+            )
+
         issues: list[str] = []
 
-        with db_session() as connection:
-            post = connection.execute(
-                "SELECT * FROM posts WHERE post_id=?",
-                (post_id,),
-            ).fetchone()
-            if post is None:
-                return ValidationResult(
-                    post_id=post_id,
-                    complete=False,
-                    issues=["post_not_found"],
-                )
+        if not state["has_detail"]:
+            issues.append("post_detail_missing")
 
-            if post["detail_raw_json"] is None:
-                issues.append("post_detail_missing")
+        if require_comments and state["comment_status"] != "COMPLETE":
+            issues.append(
+                f"comments_{str(state['comment_status'] or 'missing').lower()}"
+            )
 
-            if require_comments and post["comment_status"] != "COMPLETE":
-                issues.append(
-                    f"comments_{str(post['comment_status'] or 'missing').lower()}"
-                )
+        if require_media and state["media_incomplete"] > 0:
+            issues.append(
+                f"media_incomplete:{state['media_incomplete']}"
+            )
 
-            if require_media:
-                media_failed = connection.execute(
-                    """
-                    SELECT COUNT(*) AS count
-                    FROM media
-                    WHERE post_id=? AND is_active=1
-                      AND download_status!='COMPLETE'
-                    """,
-                    (post_id,),
-                ).fetchone()["count"]
-                if int(media_failed or 0) > 0:
-                    issues.append(f"media_incomplete:{int(media_failed)}")
+        if require_ocr and state["ocr_incomplete"] > 0:
+            issues.append(
+                f"ocr_incomplete:{state['ocr_incomplete']}"
+            )
 
-            if require_ocr:
-                missing_ocr = connection.execute(
-                    """
-                    SELECT COUNT(*) AS count
-                    FROM media m
-                    WHERE m.post_id=? AND m.is_active=1
-                      AND m.media_type IN ('image', 'cover', 'comment_image')
-                      AND m.download_status='COMPLETE'
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM ocr_results o
-                          WHERE o.media_id=m.id AND o.status='COMPLETE'
-                      )
-                    """,
-                    (post_id,),
-                ).fetchone()["count"]
-                if int(missing_ocr or 0) > 0:
-                    issues.append(f"ocr_incomplete:{int(missing_ocr)}")
-
-            if require_stt:
-                missing_stt = connection.execute(
-                    """
-                    SELECT COUNT(*) AS count
-                    FROM media m
-                    WHERE m.post_id=? AND m.is_active=1
-                      AND m.media_type='video'
-                      AND m.download_status='COMPLETE'
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM transcripts t
-                          WHERE t.media_id=m.id AND t.status='COMPLETE'
-                      )
-                    """,
-                    (post_id,),
-                ).fetchone()["count"]
-                if int(missing_stt or 0) > 0:
-                    issues.append(f"stt_incomplete:{int(missing_stt)}")
+        if require_stt and state["stt_incomplete"] > 0:
+            issues.append(
+                f"stt_incomplete:{state['stt_incomplete']}"
+            )
 
         return ValidationResult(
             post_id=post_id,
