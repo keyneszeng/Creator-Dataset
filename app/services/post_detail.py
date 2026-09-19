@@ -56,18 +56,12 @@ class PostDetailService:
             media=post["media"],
         )
 
-        media_registered = 0
-        for media in post["media"]:
-            self.media.upsert(
-                platform="xiaohongshu",
-                post_id=row["post_id"],
-                comment_id=None,
-                media_type=media["media_type"],
-                remote_url=media["remote_url"],
-            )
-            media_registered += 1
-
-        return media_registered, changes
+        self.media.reconcile_post_media(
+            platform="xiaohongshu",
+            post_id=row["post_id"],
+            media_items=post["media"],
+        )
+        return len(post["media"]), changes
 
     async def enrich_post(self, post_id: str, *, force: bool = False) -> int:
         row = self.posts.get_access_context(
