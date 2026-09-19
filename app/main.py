@@ -15,7 +15,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     settings = get_settings()
 
-    if settings.database_backend == "sqlite":
+    database_backend = getattr(settings, "database_backend", "sqlite")
+    if database_backend == "sqlite":
         init_database(settings.database_path)
     else:
         init_postgres_database(str(settings.database_url))
