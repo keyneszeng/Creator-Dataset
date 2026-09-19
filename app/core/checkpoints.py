@@ -61,3 +61,17 @@ class CheckpointRepository:
                 WHERE platform=? AND scope=? AND object_id LIKE ? AND finished=1
             """, (platform, scope, f"{object_id_prefix}%")).fetchone()
         return int(row["count"] or 0)
+
+
+    def reset_comment_crawl(self, *, platform: str, post_id: str) -> int:
+        ensure_checkpoint_table()
+        with db_session() as connection:
+            root = connection.execute("""
+                DELETE FROM checkpoints
+                WHERE platform=? AND scope='root_comments' AND object_id=?
+            """, (platform, post_id))
+            replies = connection.execute("""
+                DELETE FROM checkpoints
+                WHERE platform=? AND scope='sub_comments' AND object_id LIKE ?
+            """, (platform, f"{post_id}:%"))
+        return int(root.rowcount) + int(replies.rowcount)
