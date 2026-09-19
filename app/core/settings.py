@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # Xiaohongshu auth is environment-only. Never persist this value.
     xhs_cookie: str = ""
 
+    # Durable worker defaults.
+    worker_poll_seconds: float = 2.0
+    worker_lease_seconds: int = 180
+    worker_heartbeat_seconds: int = 45
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
