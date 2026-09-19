@@ -11,6 +11,7 @@ from app.platforms.xiaohongshu import XiaohongshuAdapter
 from app.platforms.xiaohongshu.resolver import InvalidCreatorUrl
 from app.services.comment_crawl import CommentCrawlService
 from app.services.creator_import import CreatorImportService
+from app.services.creator_pipeline import CreatorPipelineService
 from app.services.export import ExportService
 from app.services.media_pipeline import MediaPipelineService
 from app.services.ocr import OcrService
@@ -56,6 +57,15 @@ class ProcessMediaRequest(BaseModel):
 class TranscribeVideosRequest(BaseModel):
     only_missing: bool = True
     limit: int = Field(default=20, ge=1, le=200)
+
+
+class CreatorPipelineRequest(BaseModel):
+    max_posts: int = Field(default=20, ge=1, le=500)
+    run_comments: bool = True
+    run_media: bool = True
+    run_ocr: bool = True
+    run_stt: bool = True
+    export: bool = True
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -253,3 +263,38 @@ async def transcribe_videos(
             status_code=503,
             detail={"code": "STT_INTEGRATION_NOT_INSTALLED", "message": str(exc)},
         ) from exc
+
+
+@router.post("/creators/{creator_id}/run-pipeline")
+async def run_creator_pipeline(
+    creator_id: str,
+    payload: CreatorPipelineRequest,
+) -> dict[str, object]:
+    service = CreatorPipelineService()
+    try:
+        result = await service.run(
+            creator_id,
+            max_posts=payload.max_posts,
+            run_comments=payload.run_comments,
+            run_media=payload.run_media,
+            run_ocr=payload.run_ocr,
+            run_stt=payload.run_stt,
+            export=payload.export,
+        )
+    except (
+        AuthenticationRequired,
+        IntegrationNotInstalled,
+        PlatformBlocked,
+        PlatformRequestError,
+    ) as exc:
+        _raise_platform_http_error(exc)
+        raise AssertionError("unreachable")
+
+    return {
+        "creator_id": result.creator_id,
+        "posts_selected": result.posts_selected,
+        "posts_completed": result.posts_completed,
+        "posts_failed": result.posts_failed,
+        "job_id": result.job_id,
+        "status": "COMPLETE" if result.posts_failed == 0 else "PARTIAL",
+    }
