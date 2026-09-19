@@ -510,3 +510,44 @@ See [SAAS.md](SAAS.md) and [BILLING.md](BILLING.md).
 - [ ] chunk/reduce organization for very large Datasets
 - [ ] token/cost usage accounting
 - [ ] hosted platform AI credit product
+
+
+## Agent-native Product Layer
+
+- [x] Agent-facing service facade
+- [x] compact MCP tool surface
+- [x] MCP Python SDK v2 runtime
+- [x] Streamable HTTP MCP server
+- [x] stdio MCP mode for local/Agent runtimes
+- [x] Creator submit/status tools
+- [x] free Creator catalog tool
+- [x] Dataset unlock preview + explicit confirmation guard
+- [x] Dataset generation status tool
+- [x] compact Dataset get tool
+- [x] bounded normalized Dataset content tool
+- [x] paginated comment tool
+- [x] portable plugin.json
+- [x] portable mcp.json
+- [x] Creator research SKILL.md
+- [x] OpenAI Skill MCP dependency declaration
+- [x] Plugin bundle builder CLI
+- [x] HTTPS enforcement for generated remote Plugin bundles
+- [x] local Member API key identity mode
+- [x] non-loopback MCP bind blocked before OAuth
+- [x] MCP protocol-level in-process tests
+- [x] Agent unlock intent regression tests
+- [ ] OAuth 2.1 MCP user identity
+- [ ] public HTTPS MCP deployment
+- [ ] ChatGPT Developer Mode end-to-end live test
+- [ ] public Plugin Directory submission
+
+Primary Member experience target:
+
+```text
+ChatGPT
+→ Creator Dataset Skill
+→ Creator Dataset MCP
+→ Creator Dataset Core
+```
+
+Standalone Member Web UI is now secondary. Admin/Billing Web surfaces may remain lightweight.
