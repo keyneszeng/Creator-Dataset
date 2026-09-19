@@ -58,6 +58,15 @@ class SaasRepository(Protocol):
         is_admin: bool,
     ) -> bool: ...
 
+    def grant_dataset_entitlement(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_id: str,
+        source: str,
+    ) -> None: ...
+
     def record_creator_submission(
         self,
         *,
