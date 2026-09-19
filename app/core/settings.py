@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     mcp_port: int = 8765
     mcp_user_api_key: str = ""
 
+    # Current Agent product is free for personal use. Commercial billing
+    # infrastructure remains dormant until this is disabled in the future.
+    agent_free_mode: bool = True
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
