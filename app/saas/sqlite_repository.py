@@ -281,3 +281,115 @@ class SqliteSaasRepository:
                 (user_id, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+    def list_users(
+        self,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    u.*,
+                    COALESCE(SUM(CASE WHEN c.bucket='free' THEN c.delta ELSE 0 END), 0)
+                        AS free_credits,
+                    COALESCE(SUM(CASE WHEN c.bucket='paid' THEN c.delta ELSE 0 END), 0)
+                        AS paid_credits
+                FROM users u
+                LEFT JOIN credit_ledger c ON c.user_id=u.id
+                GROUP BY u.id
+                ORDER BY u.id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_user_access(
+        self,
+        *,
+        user_id: int,
+        role: str | None = None,
+        status: str | None = None,
+    ) -> bool:
+        if role is None and status is None:
+            return False
+        if role is not None and role not in {"admin", "member"}:
+            raise ValueError("Role must be admin or member.")
+        if status is not None and status not in {"active", "suspended"}:
+            raise ValueError("Status must be active or suspended.")
+
+        sets: list[str] = []
+        params: list[Any] = []
+        if role is not None:
+            sets.append("role=?")
+            params.append(role)
+        if status is not None:
+            sets.append("status=?")
+            params.append(status)
+        sets.append("updated_at=CURRENT_TIMESTAMP")
+        params.append(user_id)
+
+        with db_session() as connection:
+            cursor = connection.execute(
+                f"UPDATE users SET {', '.join(sets)} WHERE id=?",
+                params,
+            )
+        return cursor.rowcount == 1
+
+    def list_credit_ledger(
+        self,
+        *,
+        user_id: int,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM credit_ledger
+                WHERE user_id=?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_api_keys(
+        self,
+        *,
+        user_id: int,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, user_id, name, key_prefix, last_used_at,
+                       revoked_at, created_at
+                FROM api_keys
+                WHERE user_id=?
+                ORDER BY id DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def revoke_api_key(
+        self,
+        *,
+        user_id: int,
+        api_key_id: int,
+    ) -> bool:
+        with db_session() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE api_keys
+                SET revoked_at=CURRENT_TIMESTAMP
+                WHERE id=? AND user_id=? AND revoked_at IS NULL
+                """,
+                (api_key_id, user_id),
+            )
+        return cursor.rowcount == 1
