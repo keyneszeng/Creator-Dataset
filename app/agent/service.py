@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.core.settings import get_settings
 from app.core.versioning import DATASET_SCHEMA_VERSION
 from app.repositories.factory import (
     create_dataset_artifact_repository,
@@ -38,9 +39,18 @@ class AgentService:
         self.saas = SaasService(repository=self.access)
 
     def account_status(self) -> dict[str, Any]:
+        settings = get_settings()
+        if settings.agent_free_mode:
+            return {
+                "mode": "free",
+                "role": self.principal.role.value,
+                "unlimited": True,
+            }
+
         account = self.saas.account(self.principal)
         credits = account["credits"]
         return {
+            "mode": "commercial",
             "role": account["user"]["role"],
             "free_credits": credits.get("free", 0),
             "paid_credits": credits.get("paid", 0),
@@ -106,11 +116,16 @@ class AgentService:
             offset=offset,
         )
         post_ids = [str(item["post_id"]) for item in items]
-        unlocked = self.access.entitled_post_ids(
-            user_id=self.principal.user_id,
-            platform="xiaohongshu",
-            post_ids=post_ids,
-            is_admin=False,
+        settings = get_settings()
+        unlocked = (
+            set(post_ids)
+            if settings.agent_free_mode
+            else self.access.entitled_post_ids(
+                user_id=self.principal.user_id,
+                platform="xiaohongshu",
+                post_ids=post_ids,
+                is_admin=False,
+            )
         )
         ready = self.artifacts.ready_post_ids(
             platform="xiaohongshu",
@@ -131,11 +146,72 @@ class AgentService:
                     "published_at": item.get("published_at"),
                     "likes": item.get("like_count"),
                     "comments": item.get("reported_comment_count"),
-                    "unlocked": str(item["post_id"]) in unlocked,
+                    "available": (
+                        True
+                        if settings.agent_free_mode
+                        else str(item["post_id"]) in unlocked
+                    ),
                     "dataset_ready": str(item["post_id"]) in ready,
                 }
                 for item in items
             ],
+        }
+
+    def dataset_prepare(self, post_id: str) -> dict[str, Any]:
+        post = self.posts.get_access_context(
+            platform="xiaohongshu",
+            post_id=post_id,
+        )
+        if post is None:
+            raise ValueError(f"Unknown post: {post_id}")
+
+        settings = get_settings()
+        if settings.agent_free_mode:
+            if self.principal.user_id != 0:
+                self.access.grant_dataset_entitlement(
+                    user_id=self.principal.user_id,
+                    platform="xiaohongshu",
+                    post_id=post_id,
+                    source="free_mode",
+                )
+            job_id = self.queue.enqueue_dataset_generation(
+                post_id=post_id,
+                platform="xiaohongshu",
+            )
+            artifact = self.artifacts.get(
+                platform="xiaohongshu",
+                post_id=post_id,
+                dataset_schema_version=DATASET_SCHEMA_VERSION,
+            )
+            return {
+                "post_id": post_id,
+                "status": "READY" if artifact is not None else "PREPARING",
+                "free": True,
+                "generation_job_id": job_id,
+            }
+
+        # Dormant commercial path kept for future productization.
+        already = self.access.has_entitlement(
+            user_id=self.principal.user_id,
+            platform="xiaohongshu",
+            post_id=post_id,
+            is_admin=False,
+        )
+        if not already:
+            return {
+                "post_id": post_id,
+                "status": "COMMERCIAL_CONFIRMATION_REQUIRED",
+            }
+
+        job_id = self.queue.enqueue_dataset_generation(
+            post_id=post_id,
+            platform="xiaohongshu",
+        )
+        return {
+            "post_id": post_id,
+            "status": "PREPARING",
+            "free": False,
+            "generation_job_id": job_id,
         }
 
     def dataset_unlock(
@@ -144,6 +220,11 @@ class AgentService:
         *,
         confirm: bool = False,
     ) -> dict[str, Any]:
+        """Backward-compatible commercial helper; Agent tools use prepare."""
+        settings = get_settings()
+        if settings.agent_free_mode:
+            return self.dataset_prepare(post_id)
+
         post = self.posts.get_access_context(
             platform="xiaohongshu",
             post_id=post_id,
@@ -163,11 +244,8 @@ class AgentService:
                 "post_id": post_id,
                 "status": "CONFIRMATION_REQUIRED",
                 "credit_cost": 0 if account["unlimited"] else 1,
-                "free_credits": account["free_credits"],
-                "paid_credits": account["paid_credits"],
-                "message": (
-                    "Ask the user to confirm before unlocking this Dataset."
-                ),
+                "free_credits": account.get("free_credits", 0),
+                "paid_credits": account.get("paid_credits", 0),
             }
 
         result = self.saas.unlock(
@@ -339,6 +417,8 @@ class AgentService:
             )
 
     def _require_dataset_access(self, post_id: str) -> None:
+        if get_settings().agent_free_mode:
+            return
         allowed = self.access.has_entitlement(
             user_id=self.principal.user_id,
             platform="xiaohongshu",
