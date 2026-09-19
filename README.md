@@ -20,6 +20,30 @@ Creator Dataset Core
 
 普通用户不再以独立 Web SaaS 前端作为主要入口。ChatGPT 本身就是交互界面和分析层。
 
+## 当前免费模式
+
+当前阶段是个人自用，Creator Dataset **全部免费**：
+
+```text
+Creator Import      免费
+Post Catalog        免费
+Dataset Prepare     免费
+Dataset Read        免费
+Comments            免费
+OCR / STT           免费
+ChatGPT 分析        使用你现有的 ChatGPT 能力
+```
+
+默认配置：
+
+```text
+CREATOR_DATASET_AGENT_FREE_MODE=true
+```
+
+当前 Agent 不显示 credits、paywall、微信支付或付费确认。
+
+仓库中已有的 Credits / Billing / WeChat Pay 代码暂时保留，但属于**未来商业化预留**，当前产品流程不会使用。
+
 安装/开发说明见：
 
 - [Agent Plugin / ChatGPT Practice](docs/AGENT_PLUGIN.md)
@@ -54,7 +78,7 @@ account_status
 creator_submit
 creator_status
 creator_posts
-dataset_unlock
+dataset_prepare
 dataset_status
 dataset_get
 dataset_content
@@ -453,9 +477,9 @@ docker compose -f deploy/cloud-dev/docker-compose.yml up -d --build
 该环境包含 PostgreSQL + MinIO + API + Worker + Scheduler，可用于在真正上云前验证多节点执行语义。
 
 
-## SaaS Access & Dataset Credits
+## Future Commercial Infrastructure (当前关闭)
 
-SaaS 模式已经支持：
+以下能力是未来商业化预留，当前 Agent 免费模式不会启用：
 
 ```text
 Admin
@@ -495,7 +519,7 @@ Member 解锁：
 POST /api/saas/datasets/{post_id}/unlock
 ```
 
-前 5 个 Dataset 优先消耗 free credits；之后消耗 paid credits；余额不足返回：
+历史/未来商业模式曾设计为 free/paid credits；当前免费模式不会执行以下扣费逻辑：
 
 ```text
 HTTP 402 PAYMENT_REQUIRED
@@ -506,7 +530,7 @@ HTTP 402 PAYMENT_REQUIRED
 支付渠道目前保持 provider-neutral。Stripe/Paddle 等未来只需把经过签名验证的支付事件映射为幂等 `billing_events`，再向 paid credit ledger 入账。
 
 
-### SaaS 用户路径
+### Future SaaS 用户路径（当前不使用）
 
 ```text
 Submit Creator
@@ -595,4 +619,4 @@ LLM 不修改原始 Creator/Post/Comment/OCR/STT 数据。
 
 用户 API Key 使用 AES-GCM 加密保存；云端 LLM Host 必须进入管理员 allow-list；连接外部 LLM 时需要明确确认会把已解锁 Dataset 的文本发送给该 Provider。
 
-初始 BYO-LLM 模型下，用户直接承担自己的模型费用，Creator Dataset 仍只对 Dataset Unlock 计费。
+BYO-LLM 可继续作为可选能力；当前 Creator Dataset 本身不对 Dataset Prepare 收费。
