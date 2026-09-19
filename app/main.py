@@ -5,11 +5,13 @@ from fastapi import FastAPI
 
 from app.api.routes import router
 from app.core.database import init_database
+from app.core.logging import configure_logging
 from app.core.settings import get_settings
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
     settings = get_settings()
     init_database(settings.database_path)
     yield
