@@ -138,6 +138,7 @@ pytest
 - [Video STT](docs/STT.md)
 - [Analysis Corpus](docs/ANALYSIS_CORPUS.md)
 - [Reliability Architecture](docs/RELIABILITY_ARCHITECTURE.md)
+- [Stage Jobs](docs/STAGE_JOBS.md)
 - [Creator Pipeline](docs/CREATOR_PIPELINE.md)
 
 ## V0.1 技术建议
@@ -230,3 +231,34 @@ retry / resume / parent reconciliation
 当前 V0.x 针对单机运行优化：SQLite WAL、busy timeout、共享限速、Worker lease、指数退避和 Raw API Snapshot 已实现。
 
 当进入多机 Worker、多租户或高并发写入阶段，再迁移到 Postgres + Object Storage；上层 API、PlatformAdapter 和 Dataset Schema 尽量保持不变。
+
+
+## Stage-level durable execution
+
+生产队列现在按阶段执行：
+
+```text
+CREATOR_PIPELINE
+└── POST_PIPELINE
+    ├── POST_DETAIL
+    ├── COMMENTS
+    ├── MEDIA_DOWNLOAD
+    ├── OCR
+    ├── STT
+    ├── VALIDATION
+    └── EXPORT
+```
+
+查看任务树：
+
+```text
+GET /api/jobs/{job_id}/tree
+```
+
+定点修复失败阶段：
+
+```text
+POST /api/jobs/{job_id}/repair
+```
+
+Repair 只重开目标 Stage 及其下游依赖，不会重复执行已经完成且无依赖关系的阶段。
