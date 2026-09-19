@@ -104,15 +104,6 @@ class PostgresJobRepository:
     ) -> int:
         with self._connect() as connection:
             with connection.cursor() as cursor:
-                if idempotency_key:
-                    cursor.execute(
-                        "SELECT id FROM jobs WHERE idempotency_key=%s",
-                        (idempotency_key,),
-                    )
-                    existing = cursor.fetchone()
-                    if existing:
-                        return int(existing["id"])
-
                 cursor.execute("""
                     INSERT INTO jobs (
                         parent_job_id, idempotency_key, job_type, platform,
@@ -122,6 +113,7 @@ class PostgresJobRepository:
                         %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
                         'PENDING', %s, %s
                     )
+                    ON CONFLICT(idempotency_key) DO NOTHING
                     RETURNING id
                 """, (
                     parent_job_id,
@@ -135,7 +127,27 @@ class PostgresJobRepository:
                     priority,
                     max_attempts,
                 ))
-                job_id = int(cursor.fetchone()["id"])
+                inserted = cursor.fetchone()
+
+                if inserted is None:
+                    if not idempotency_key:
+                        raise RuntimeError(
+                            "Job insert produced no row without an "
+                            "idempotency key."
+                        )
+                    cursor.execute(
+                        "SELECT id FROM jobs WHERE idempotency_key=%s",
+                        (idempotency_key,),
+                    )
+                    existing = cursor.fetchone()
+                    if existing is None:
+                        raise RuntimeError(
+                            "Idempotent Job conflict resolved without "
+                            "an existing Job."
+                        )
+                    return int(existing["id"])
+
+                job_id = int(inserted["id"])
 
                 for dependency_id in depends_on or []:
                     cursor.execute("""
