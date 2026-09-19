@@ -95,3 +95,36 @@ def test_expired_postgres_lease_requeues() -> None:
 
     assert repository.recover_expired_leases() == 1
     assert repository.get(job_id=job_id)["status"] == "RETRY"
+
+
+def test_concurrent_idempotent_enqueue_returns_same_job() -> None:
+    repository = _repository()
+    _reset(repository)
+
+    def enqueue(_: str):
+        return _repository().enqueue(
+            job_type="CREATOR_REFRESH",
+            idempotency_key="same-refresh-run",
+            payload={"creator_id": "creator-1"},
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        ids = list(
+            executor.map(
+                enqueue,
+                ["a", "b", "c", "d"],
+            )
+        )
+
+    assert len(set(ids)) == 1
+
+    with repository._connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT COUNT(*) AS count "
+                "FROM jobs WHERE idempotency_key=%s",
+                ("same-refresh-run",),
+            )
+            row = cursor.fetchone()
+
+    assert int(row["count"]) == 1
