@@ -18,18 +18,42 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
+def _collect_urls(value: Any) -> list[str]:
+    urls: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, str):
+            if node.startswith(("http://", "https://")):
+                urls.append(node)
+            return
+        if isinstance(node, dict):
+            for key, nested in node.items():
+                key_lower = str(key).lower()
+                if (
+                    "url" in key_lower
+                    or key_lower in {
+                        "info_list",
+                        "image_list",
+                        "video",
+                        "media",
+                        "stream",
+                    }
+                ):
+                    visit(nested)
+            return
+        if isinstance(node, list):
+            for nested in node:
+                visit(nested)
+
+    visit(value)
+    return list(dict.fromkeys(urls))
+
+
 def normalize_creator(raw: dict[str, Any], creator_id: str) -> dict[str, Any]:
     basic = raw.get("basic_info") if isinstance(raw.get("basic_info"), dict) else {}
-    interactions = (
-        raw.get("interactions")
-        if isinstance(raw.get("interactions"), list)
-        else []
-    )
+    interactions = raw.get("interactions") if isinstance(raw.get("interactions"), list) else []
 
-    metrics: dict[str, int | None] = {
-        "followers": None,
-        "following": None,
-    }
+    metrics: dict[str, int | None] = {"followers": None, "following": None}
     for item in interactions:
         if not isinstance(item, dict):
             continue
@@ -90,22 +114,31 @@ def normalize_posts_page(raw: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    return {
-        "notes": normalized_notes,
-        "cursor": cursor,
-        "has_more": has_more,
-    }
+    return {"notes": normalized_notes, "cursor": cursor, "has_more": has_more}
 
 
 def normalize_post_detail(raw: dict[str, Any], post_id: str) -> dict[str, Any]:
     items = raw.get("items")
     item = items[0] if isinstance(items, list) and items and isinstance(items[0], dict) else raw
     card = item.get("note_card") if isinstance(item.get("note_card"), dict) else item
-    interact = (
-        card.get("interact_info")
-        if isinstance(card.get("interact_info"), dict)
-        else {}
-    )
+    interact = card.get("interact_info") if isinstance(card.get("interact_info"), dict) else {}
+
+    images = card.get("image_list") if isinstance(card.get("image_list"), list) else []
+    image_urls: list[str] = []
+    for image in images:
+        image_urls.extend(_collect_urls(image))
+    image_urls = list(dict.fromkeys(image_urls))
+
+    cover_urls = _collect_urls(card.get("cover"))
+    video_urls = _collect_urls(card.get("video"))
+
+    media: list[dict[str, str]] = []
+    for url in image_urls:
+        media.append({"media_type": "image", "remote_url": url})
+    for url in cover_urls:
+        media.append({"media_type": "cover", "remote_url": url})
+    for url in video_urls:
+        media.append({"media_type": "video", "remote_url": url})
 
     return {
         "post_id": post_id,
@@ -113,16 +146,13 @@ def normalize_post_detail(raw: dict[str, Any], post_id: str) -> dict[str, Any]:
         "content": _first(card, "desc", "content", "description"),
         "post_type": _first(card, "type", "note_type"),
         "published_at": _first(card, "time", "timestamp", "publish_time"),
-        "like_count": _to_int(
-            _first(interact, "liked_count", "like_count", "likes")
-        ),
+        "like_count": _to_int(_first(interact, "liked_count", "like_count", "likes")),
         "favorite_count": _to_int(
             _first(interact, "collected_count", "collect_count", "favorite_count")
         ),
-        "share_count": _to_int(
-            _first(interact, "share_count", "shared_count", "shares")
-        ),
+        "share_count": _to_int(_first(interact, "share_count", "shared_count", "shares")),
         "reported_comment_count": _to_int(
             _first(interact, "comment_count", "comments_count")
         ),
+        "media": media,
     }
