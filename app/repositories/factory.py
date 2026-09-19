@@ -192,3 +192,13 @@ def create_dataset_artifact_repository(
         return SqliteDatasetArtifactRepository()
     from app.postgres.artifacts import PostgresDatasetArtifactRepository
     return PostgresDatasetArtifactRepository(_database_url(settings))
+
+
+
+def create_llm_repository(settings: Settings | None = None) -> Any:
+    settings = _settings(settings)
+    if settings.database_backend == "sqlite":
+        from app.llm.sqlite_repository import SqliteLlmRepository
+        return SqliteLlmRepository()
+    from app.postgres.llm import PostgresLlmRepository
+    return PostgresLlmRepository(_database_url(settings))
