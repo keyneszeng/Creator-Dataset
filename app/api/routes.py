@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.core.capabilities import deployment_capabilities
 from app.core.repositories import (
     ChangeEventRepository,
     JobRepository,
@@ -544,3 +545,8 @@ async def get_creator_changes(
         "count": len(items),
         "items": items,
     }
+
+
+@router.get("/system/capabilities")
+async def system_capabilities() -> dict[str, object]:
+    return deployment_capabilities()
