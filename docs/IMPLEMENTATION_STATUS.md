@@ -551,3 +551,27 @@ ChatGPT
 ```
 
 Standalone Member Web UI is now secondary. Admin/Billing Web surfaces may remain lightweight.
+
+
+## Current Free Personal-use Mode
+
+- [x] Agent free mode enabled by default
+- [x] Creator import free
+- [x] Post catalog free
+- [x] Dataset preparation free
+- [x] Dataset reading free
+- [x] Comments access free
+- [x] no credit deduction in Agent flow
+- [x] no PAYMENT_REQUIRED in Agent flow
+- [x] free_mode entitlement source
+- [x] SQLite free entitlement grant
+- [x] PostgreSQL free entitlement grant
+- [x] dataset_prepare MCP tool replaces dataset_unlock
+- [x] Skill no longer discusses credits/payment
+- [x] Billing/WeChat Pay retained only as dormant future infrastructure
+
+Default:
+
+```text
+CREATOR_DATASET_AGENT_FREE_MODE=true
+```
