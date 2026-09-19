@@ -413,6 +413,44 @@ class PostgresPostRepository(_PostgresBase):
                 rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+    def list_catalog(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT
+                        post_id,
+                        source_url,
+                        title,
+                        post_type,
+                        published_at,
+                        like_count,
+                        favorite_count,
+                        share_count,
+                        reported_comment_count,
+                        comment_status,
+                        detail_raw_json IS NOT NULL AS has_detail
+                    FROM posts
+                    WHERE platform=%s AND creator_id=%s
+                    ORDER BY
+                        published_at DESC NULLS LAST,
+                        id DESC
+                    LIMIT %s OFFSET %s
+                """, (
+                    platform,
+                    creator_id,
+                    limit,
+                    offset,
+                ))
+                rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
     def count_for_creator(
         self,
         *,
