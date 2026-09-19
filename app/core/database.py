@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS posts (
     detail_raw_json TEXT,
     discovery_fingerprint TEXT,
     detail_fingerprint TEXT,
+    content_fingerprint TEXT,
+    media_fingerprint TEXT,
+    engagement_fingerprint TEXT,
+    comments_fingerprint TEXT,
     last_discovered_at DATETIME,
     last_refreshed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -353,6 +357,10 @@ def init_database(database_path: Path | None = None) -> None:
         for column, definition in (
             ("discovery_fingerprint", "TEXT"),
             ("detail_fingerprint", "TEXT"),
+            ("content_fingerprint", "TEXT"),
+            ("media_fingerprint", "TEXT"),
+            ("engagement_fingerprint", "TEXT"),
+            ("comments_fingerprint", "TEXT"),
             ("last_discovered_at", "DATETIME"),
             ("last_refreshed_at", "DATETIME"),
         ):
