@@ -52,11 +52,25 @@ class QueueService:
             f"stt={int(run_stt)}:"
             f"export={int(export)}"
         )
+        parent_key = f"creator-pipeline:{creator_id}:{run_key}"
+        existing = self.jobs.get_by_idempotency_key(
+            idempotency_key=parent_key,
+        )
+        if existing is not None:
+            summary = self.jobs.children_summary(
+                parent_job_id=int(existing["id"])
+            )
+            return EnqueueCreatorResult(
+                parent_job_id=int(existing["id"]),
+                creator_id=creator_id,
+                posts_enqueued=summary.get("TOTAL", 0),
+            )
+
         parent_job_id = self.jobs.enqueue(
             job_type="CREATOR_PIPELINE",
             platform="xiaohongshu",
             creator_id=creator_id,
-            idempotency_key=f"creator-pipeline:{creator_id}:{run_key}",
+            idempotency_key=parent_key,
             payload={
                 "max_posts": max_posts,
                 "run_comments": run_comments,
