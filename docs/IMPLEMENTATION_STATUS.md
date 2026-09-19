@@ -302,3 +302,41 @@ POST /api/jobs/{job_id}/repair
 ```
 
 See [STAGE_JOBS.md](STAGE_JOBS.md).
+
+
+## Incremental Refresh & Scheduling
+
+- [x] CREATOR_REFRESH durable parent Job
+- [x] CREATOR_DISCOVERY refresh child Job
+- [x] shallow newest-first refresh scan
+- [x] consecutive unchanged page early-stop
+- [x] discovery fingerprints
+- [x] content fingerprints
+- [x] media fingerprints
+- [x] engagement fingerprints
+- [x] comment-count fingerprints
+- [x] refresh_runs audit trail
+- [x] change_events audit trail
+- [x] selective Stage fan-out
+- [x] comment checkpoint invalidation
+- [x] active media reconciliation
+- [x] persistent refresh schedules
+- [x] dedicated Scheduler process
+- [x] schedule idempotency
+- [x] schedule pause/resume API
+- [x] refresh history API
+- [x] change events API
+- [x] scheduler status in /api/system/status
+
+Production processes:
+
+```bash
+uvicorn app.main:app
+creator-dataset-worker
+creator-dataset-scheduler
+```
+
+See:
+
+- [INCREMENTAL_REFRESH.md](INCREMENTAL_REFRESH.md)
+- [SCHEDULER.md](SCHEDULER.md)
