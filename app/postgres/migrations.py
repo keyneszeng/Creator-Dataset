@@ -8,7 +8,7 @@ from app.postgres.schema import (
     POSTGRES_REFRESH_SCHEMA,
 )
 
-POSTGRES_SCHEMA_VERSION = 3
+POSTGRES_SCHEMA_VERSION = 4
 POSTGRES_MIGRATION_LOCK_KEY = 48392178
 
 Migration = Callable[[Any], None]
@@ -110,10 +110,30 @@ def migration_003_saas_access(cursor) -> None:
     """)
 
 
+def migration_004_dataset_artifacts(cursor) -> None:
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS dataset_artifacts (
+            id BIGSERIAL PRIMARY KEY,
+            platform TEXT NOT NULL,
+            post_id TEXT NOT NULL,
+            dataset_schema_version TEXT NOT NULL,
+            storage_backend TEXT NOT NULL,
+            export_prefix TEXT NOT NULL,
+            artifacts_json JSONB NOT NULL,
+            generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(platform, post_id, dataset_schema_version)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dataset_artifacts_post
+        ON dataset_artifacts(platform, post_id, generated_at DESC);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_bootstrap),
     (2, migration_002_cloud_runtime_indexes),
     (3, migration_003_saas_access),
+    (4, migration_004_dataset_artifacts),
 ]
 
 
