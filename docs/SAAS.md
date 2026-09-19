@@ -238,3 +238,104 @@ organization_entitlements
 ```
 
 without changing the shared Creator Dataset layer.
+
+
+## End-user Product Flow
+
+The intended Member journey is now:
+
+```text
+Submit Creator URL
+      ↓
+202 Accepted
+      ↓
+CREATOR_IMPORT Durable Job
+      ↓
+Browse free Post Catalog
+      ↓
+Choose a Post
+      ↓
+Unlock Dataset
+      ↓
+free credit / paid credit
+      ↓
+shared Dataset Generation Job
+      ↓
+Dataset Ready
+      ↓
+authenticated download
+```
+
+### 1. Submit Creator
+
+```http
+POST /api/saas/creators/submit
+```
+
+Creator submission is asynchronous. The API only validates/resolves the URL and enqueues a shared `CREATOR_IMPORT` Job.
+
+The same Creator submitted by multiple users shares the same underlying import Job.
+
+Check:
+
+```http
+GET /api/saas/creators/{creator_id}/status
+```
+
+Large Creators are imported in bounded batches. If more Post pages remain, the Worker schedules an immediate continuation from the persisted cursor rather than falsely marking the import complete.
+
+### 2. My Creators
+
+```http
+GET /api/saas/me/creators
+```
+
+Member workspaces only expose Creators that the user has submitted.
+
+### 3. Browse Post Catalog — Free
+
+```http
+GET /api/saas/creators/{creator_id}/posts
+```
+
+Catalog browsing does not consume Dataset credits.
+
+Each Post includes safe preview metadata plus:
+
+- unlocked
+- dataset_ready
+- unlock_cost_credits
+- can_unlock
+
+Full body/OCR/STT/comments remain behind Dataset entitlement.
+
+### 4. Unlock
+
+```http
+POST /api/saas/datasets/{post_id}/unlock
+```
+
+This is the billing boundary.
+
+### 5. Poll Dataset State
+
+```http
+GET /api/saas/datasets/{post_id}
+```
+
+If processing is incomplete, the response exposes the shared generation Job status.
+
+If ready, it returns authenticated download endpoints or short-lived S3 URLs.
+
+## Production Security
+
+When `environment=production`, readiness fails if SaaS authentication is disabled.
+
+Bootstrap Admin secret comparison uses constant-time comparison.
+
+For production:
+
+- terminate TLS at the ingress/load balancer,
+- keep API keys and bootstrap secrets in a secret manager,
+- remove the bootstrap secret after the first persistent Admin is created,
+- never expose internal operational APIs to Members.
