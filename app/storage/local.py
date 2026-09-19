@@ -35,6 +35,7 @@ class LocalObjectStore:
             key=key,
             size=target.stat().st_size,
             local_path=str(target),
+            uri=target.as_uri(),
         )
 
     def exists(self, *, key: str) -> bool:
