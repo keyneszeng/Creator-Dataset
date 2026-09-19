@@ -105,7 +105,7 @@ Verify:
 2. the nine compact tools are listed;
 3. `account_status` works;
 4. `creator_submit` returns a background import state;
-5. `dataset_prepare` prepares a Dataset without credits or payment.
+5. `dataset_prepare` prepares a Dataset directly.
 
 ## ChatGPT Development Practice
 
@@ -180,13 +180,13 @@ Catalog browsing is free.
 把第 2 篇做成完整 Dataset。
 ```
 
-That is explicit user intent, so the Agent may call:
+The Agent may call:
 
 ```text
-dataset_unlock(post_id, confirm=true)
+dataset_prepare(post_id)
 ```
 
-If the user merely asks which Post might be useful, do not unlock it.
+Preparation is free and idempotent.
 
 ### Analyze
 
@@ -223,12 +223,11 @@ In this mode:
 - Dataset preparation is free;
 - Dataset reading is free;
 - comment pagination is free;
-- no credits are consumed;
-- no payment flow is exposed to the Agent.
+- no usage quota is enforced in the Agent flow.
 
-A real Member identity may still be used for workspace isolation and future compatibility, but Dataset preparation grants a `free_mode` entitlement without touching the credit ledger.
+A real Member identity may still be used for workspace isolation and future compatibility. Dataset preparation grants a `free_mode` entitlement.
 
-Commercial billing, payment orders, and WeChat Pay code remain dormant for possible future productization.
+Commercial modules are retained separately for possible future productization.
 
 ## Remote Authentication Boundary
 
