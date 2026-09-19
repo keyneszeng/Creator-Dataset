@@ -70,6 +70,21 @@ class S3ObjectStore:
             Key=self._key(key),
         )
 
+    def access_url(
+        self,
+        *,
+        key: str,
+        expires_seconds: int = 900,
+    ) -> str | None:
+        return self.client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.bucket,
+                "Key": self._key(key),
+            },
+            ExpiresIn=expires_seconds,
+        )
+
     @contextmanager
     def materialize(
         self,
