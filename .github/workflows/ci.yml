@@ -61,4 +61,4 @@ jobs:
           pip install -e ".[dev,postgres]"
 
       - name: PostgreSQL integration tests
-        run: pytest tests/test_postgres_jobs_integration.py
+        run: pytest tests/test_postgres_*_integration.py
