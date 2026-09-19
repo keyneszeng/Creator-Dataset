@@ -150,6 +150,8 @@ class ExportService:
     def _reference(self, stored: StoredObject) -> str:
         if stored.local_path:
             return stored.local_path
+        if stored.uri:
+            return stored.uri
         return f"{stored.backend}://{stored.key}"
 
     def _normalize_row(self, row: dict[str, Any]) -> dict[str, Any]:
