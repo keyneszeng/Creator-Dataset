@@ -7,6 +7,7 @@ from random import random
 class JobStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
+    WAITING = "WAITING"
     COMPLETE = "COMPLETE"
     PARTIAL = "PARTIAL"
     BLOCKED = "BLOCKED"
