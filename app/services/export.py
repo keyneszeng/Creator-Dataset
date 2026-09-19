@@ -1,9 +1,12 @@
+import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.core.repositories import ExportRepository, TextUnitRepository
 from app.core.settings import get_settings
+from app.core.versioning import DATASET_SCHEMA_VERSION, PIPELINE_API_VERSION
 from app.services.analysis_corpus import AnalysisCorpusService
 
 
@@ -55,6 +58,7 @@ class ExportService:
         media_path = export_dir / "media.jsonl"
         analysis_path = export_dir / "analysis.jsonl"
         markdown_path = export_dir / "knowledge.md"
+        manifest_path = export_dir / "manifest.json"
 
         post_path.write_text(
             json.dumps(post, ensure_ascii=False, indent=2),
@@ -86,12 +90,39 @@ class ExportService:
             encoding="utf-8",
         )
 
+        files = {
+            "post.json": post_path,
+            "comments.jsonl": comments_path,
+            "media.jsonl": media_path,
+            "analysis.jsonl": analysis_path,
+            "knowledge.md": markdown_path,
+        }
+        manifest = {
+            "dataset_schema_version": DATASET_SCHEMA_VERSION,
+            "pipeline_api_version": PIPELINE_API_VERSION,
+            "platform": post.get("platform"),
+            "post_id": post_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "files": {
+                name: {
+                    "bytes": path.stat().st_size,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for name, path in files.items()
+            },
+        }
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
         return {
             "post_json": str(post_path),
             "comments_jsonl": str(comments_path),
             "media_jsonl": str(media_path),
             "analysis_jsonl": str(analysis_path),
             "knowledge_markdown": str(markdown_path),
+            "manifest_json": str(manifest_path),
         }
 
     def _normalize_row(self, row: dict[str, Any]) -> dict[str, Any]:
