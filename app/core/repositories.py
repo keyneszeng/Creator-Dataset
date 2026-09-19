@@ -135,7 +135,8 @@ class CommentRepository:
                user_id: str | None, user_name: str | None, user_avatar: str | None,
                content: str | None, like_count: int | None, ip_location: str | None,
                published_at: int | str | None, depth: int, has_more_replies: bool,
-               reply_count: int, pictures: list[Any], raw: dict[str, Any]) -> None:
+               reply_count: int, pictures: list[Any], picture_urls: list[str] | None = None,
+               raw: dict[str, Any] = {}) -> None:
         with db_session() as connection:
             connection.execute("""
                 INSERT INTO comments (
@@ -161,6 +162,14 @@ class CommentRepository:
                   user_id, user_name, user_avatar, content, like_count, ip_location,
                   published_at, depth, int(has_more_replies), reply_count,
                   json.dumps(raw, ensure_ascii=False)))
+
+            for remote_url in picture_urls or []:
+                connection.execute("""
+                    INSERT OR IGNORE INTO media (
+                        platform, post_id, comment_id, media_type, remote_url,
+                        download_status
+                    ) VALUES (?, ?, ?, 'comment_image', ?, 'PENDING')
+                """, (platform, post_id, comment_id, remote_url))
 
     def list_roots_with_replies(self, *, platform: str, post_id: str) -> list[dict[str, Any]]:
         with db_session() as connection:
@@ -207,3 +216,148 @@ class AuditRepository:
             """, (post_id, expected_comments, actual_comments, root_comments, reply_comments,
                   failed_threads, int(root_pagination_finished), reply_threads_total,
                   reply_threads_finished, int(pagination_finished), completeness_ratio, status))
+
+
+
+class MediaRepository:
+    def upsert(
+        self,
+        *,
+        platform: str,
+        post_id: str | None,
+        comment_id: str | None,
+        media_type: str,
+        remote_url: str,
+        local_path: str | None = None,
+        download_status: str = "PENDING",
+    ) -> int:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO media (
+                    platform, post_id, comment_id, media_type, remote_url,
+                    local_path, download_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+            """, (
+                platform,
+                post_id,
+                comment_id,
+                media_type,
+                remote_url,
+                local_path,
+                download_status,
+            ))
+            row = connection.execute("""
+                SELECT id FROM media
+                WHERE platform=?
+                  AND IFNULL(post_id, '')=IFNULL(?, '')
+                  AND IFNULL(comment_id, '')=IFNULL(?, '')
+                  AND media_type=?
+                  AND remote_url=?
+            """, (
+                platform,
+                post_id,
+                comment_id,
+                media_type,
+                remote_url,
+            )).fetchone()
+        return int(row["id"])
+
+    def list_local_images(
+        self,
+        *,
+        post_id: str,
+        include_comment_images: bool = True,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        media_types = ["image", "cover"]
+        if include_comment_images:
+            media_types.append("comment_image")
+        placeholders = ",".join("?" for _ in media_types)
+        query = f"""
+            SELECT id, post_id, comment_id, media_type, remote_url, local_path
+            FROM media
+            WHERE post_id=?
+              AND media_type IN ({placeholders})
+              AND download_status='COMPLETE'
+              AND local_path IS NOT NULL
+            ORDER BY id ASC
+            LIMIT ?
+        """
+        params: list[Any] = [post_id, *media_types, limit]
+        with db_session() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_downloaded(
+        self,
+        *,
+        media_id: int,
+        local_path: str,
+        sha256: str | None = None,
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE media
+                SET local_path=?, sha256=?, download_status='COMPLETE'
+                WHERE id=?
+            """, (local_path, sha256, media_id))
+
+
+class OcrRepository:
+    def exists(self, *, media_id: int, engine: str) -> bool:
+        with db_session() as connection:
+            row = connection.execute("""
+                SELECT 1 FROM ocr_results
+                WHERE media_id=? AND engine=? AND status='COMPLETE'
+                LIMIT 1
+            """, (media_id, engine)).fetchone()
+        return row is not None
+
+    def save_result(
+        self,
+        *,
+        media_id: int,
+        engine: str,
+        engine_version: str | None,
+        language: str | None,
+        full_text: str,
+        average_confidence: float | None,
+        blocks: list[dict[str, Any]],
+    ) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO ocr_results (
+                    media_id, engine, engine_version, language, full_text,
+                    average_confidence, blocks_json, status, error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'COMPLETE', NULL)
+                ON CONFLICT(media_id, engine) DO UPDATE SET
+                    engine_version=excluded.engine_version,
+                    language=excluded.language,
+                    full_text=excluded.full_text,
+                    average_confidence=excluded.average_confidence,
+                    blocks_json=excluded.blocks_json,
+                    status='COMPLETE',
+                    error=NULL,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (
+                media_id,
+                engine,
+                engine_version,
+                language,
+                full_text,
+                average_confidence,
+                json.dumps(blocks, ensure_ascii=False),
+            ))
+
+    def save_error(self, *, media_id: int, engine: str, error: str) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                INSERT INTO ocr_results (
+                    media_id, engine, full_text, status, error
+                ) VALUES (?, ?, '', 'FAILED', ?)
+                ON CONFLICT(media_id, engine) DO UPDATE SET
+                    status='FAILED',
+                    error=excluded.error,
+                    updated_at=CURRENT_TIMESTAMP
+            """, (media_id, engine, error))
