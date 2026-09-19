@@ -168,3 +168,23 @@ knowledge.md
 ```
 
 See [MEDIA_PIPELINE.md](MEDIA_PIPELINE.md) and [OCR.md](OCR.md).
+
+
+## Analysis Corpus
+
+- [x] provenance-aware text_units table
+- [x] author text units
+- [x] post image OCR units
+- [x] comment text units
+- [x] reply text units
+- [x] comment image OCR units
+- [x] analysis.jsonl export
+- [x] source_key idempotency
+
+Recommended machine-analysis source:
+
+```text
+analysis.jsonl
+```
+
+See [ANALYSIS_CORPUS.md](ANALYSIS_CORPUS.md).
