@@ -37,11 +37,15 @@ postgres = [
 llm = [
   "cryptography>=43,<47",
 ]
+agent = [
+  "mcp>=2,<3",
+]
 
 [project.scripts]
 creator-dataset-worker = "app.worker:main"
 creator-dataset-scheduler = "app.scheduler:main"
 creator-dataset-backup = "app.backup:main"
+creator-dataset-mcp = "app.mcp_server:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
