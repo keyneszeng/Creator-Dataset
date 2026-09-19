@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import asdict
-from app.core.repositories import MediaRepository, OcrRepository
+from typing import Any
+
+from app.repositories.factory import create_media_repository, create_ocr_repository
 from app.ocr.base import OcrEngine
 from app.ocr.factory import create_ocr_engine
 from app.storage.materialize import materialize_media
@@ -10,12 +12,12 @@ class OcrService:
     def __init__(
         self,
         *,
-        media_repository: MediaRepository | None = None,
-        ocr_repository: OcrRepository | None = None,
+        media_repository: Any | None = None,
+        ocr_repository: Any | None = None,
         engine: OcrEngine | None = None,
     ) -> None:
-        self.media = media_repository or MediaRepository()
-        self.ocr = ocr_repository or OcrRepository()
+        self.media = media_repository or create_media_repository()
+        self.ocr = ocr_repository or create_ocr_repository()
         self.engine = engine or create_ocr_engine()
 
     async def process_post_images(
