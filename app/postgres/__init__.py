@@ -13,6 +13,12 @@ from app.postgres.creator_posts import (
     PostgresPostRepository,
 )
 from app.postgres.jobs import PostgresJobRepository
+from app.postgres.refresh import (
+    PostgresChangeEventRepository,
+    PostgresRawSnapshotRepository,
+    PostgresRefreshRunRepository,
+    PostgresRefreshScheduleRepository,
+)
 from app.postgres.runtime import (
     PostgresSharedRateLimiter,
     PostgresWorkerRepository,
@@ -20,6 +26,7 @@ from app.postgres.runtime import (
 
 __all__ = [
     "PostgresAuditRepository",
+    "PostgresChangeEventRepository",
     "PostgresCheckpointRepository",
     "PostgresCommentRepository",
     "PostgresCreatorRepository",
@@ -28,6 +35,9 @@ __all__ = [
     "PostgresMediaRepository",
     "PostgresOcrRepository",
     "PostgresPostRepository",
+    "PostgresRawSnapshotRepository",
+    "PostgresRefreshRunRepository",
+    "PostgresRefreshScheduleRepository",
     "PostgresSharedRateLimiter",
     "PostgresTextUnitRepository",
     "PostgresTranscriptRepository",
