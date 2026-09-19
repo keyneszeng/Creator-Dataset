@@ -8,7 +8,7 @@ from app.postgres.schema import (
     POSTGRES_REFRESH_SCHEMA,
 )
 
-POSTGRES_SCHEMA_VERSION = 4
+POSTGRES_SCHEMA_VERSION = 5
 POSTGRES_MIGRATION_LOCK_KEY = 48392178
 
 Migration = Callable[[Any], None]
@@ -129,11 +129,35 @@ def migration_004_dataset_artifacts(cursor) -> None:
     """)
 
 
+def migration_005_billing_events(cursor) -> None:
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS billing_events (
+            id BIGSERIAL PRIMARY KEY,
+            provider TEXT NOT NULL,
+            event_id TEXT NOT NULL,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            credits INTEGER NOT NULL DEFAULT 0,
+            amount_minor BIGINT,
+            currency TEXT,
+            payload_json JSONB,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(provider, event_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_billing_events_user
+        ON billing_events(user_id, created_at DESC);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_bootstrap),
     (2, migration_002_cloud_runtime_indexes),
     (3, migration_003_saas_access),
     (4, migration_004_dataset_artifacts),
+    (5, migration_005_billing_events),
 ]
 
 
