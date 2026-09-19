@@ -15,6 +15,7 @@ from app.core.errors import (
 from app.core.jobs import RetryPolicy
 from app.core.logging import configure_logging
 from app.core.repositories import JobRepository, WorkerRepository
+from app.jobs.contracts import DurableJobRepository
 from app.core.settings import get_settings
 from app.services.comment_crawl import CommentCrawlService
 from app.services.export import ExportService
@@ -35,7 +36,7 @@ class DurableWorker:
         self,
         *,
         worker_id: str | None = None,
-        jobs: JobRepository | None = None,
+        jobs: DurableJobRepository | None = None,
         handlers: dict[str, JobHandler] | None = None,
         retry_policy: RetryPolicy | None = None,
     ) -> None:
