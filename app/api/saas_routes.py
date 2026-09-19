@@ -22,7 +22,6 @@ from app.repositories.factory import (
 from app.saas.auth import require_admin, require_principal
 from app.saas.models import Principal
 from app.saas.service import SaasService
-from app.services.creator_import import CreatorImportService
 from app.services.queue import QueueService
 from app.storage.factory import create_object_store_for_backend
 
@@ -374,27 +373,18 @@ async def creator_post_catalog(
     }
 
 
-@router.post("/creators/submit")
+@router.post("/creators/submit", status_code=202)
 async def submit_creator(
     payload: SubmitCreatorRequest,
     principal: Principal = Depends(require_principal),
 ) -> dict[str, Any]:
-    service = CreatorImportService()
     try:
-        result = await service.import_creator(
+        result = QueueService().enqueue_creator_import(
             str(payload.url),
             max_pages=payload.max_pages,
         )
     except InvalidCreatorUrl as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except (
-        AuthenticationRequired,
-        IntegrationNotInstalled,
-        PlatformBlocked,
-        PlatformRequestError,
-    ) as exc:
-        _raise_platform_http_error(exc)
-        raise AssertionError("unreachable")
 
     if principal.user_id != 0:
         create_saas_repository().record_creator_submission(
@@ -404,11 +394,45 @@ async def submit_creator(
             submitted_url=str(payload.url),
         )
 
+    job = create_job_repository().get(job_id=result.job_id)
     return {
         "creator_id": result.creator_id,
-        "discovered_posts": result.discovered_posts,
-        "discovery_finished": result.discovery_finished,
-        "next_cursor": result.next_cursor,
+        "canonical_url": result.canonical_url,
+        "import_job_id": result.job_id,
+        "status": job["status"] if job else "PENDING",
+    }
+
+
+@router.get("/creators/{creator_id}/status")
+async def creator_import_status(
+    creator_id: str,
+    principal: Principal = Depends(require_principal),
+) -> dict[str, Any]:
+    platform = "xiaohongshu"
+    access = create_saas_repository()
+    if not access.has_creator_submission(
+        user_id=principal.user_id,
+        platform=platform,
+        creator_id=creator_id,
+        is_admin=principal.is_admin,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CREATOR_NOT_IN_WORKSPACE"},
+        )
+
+    key = f"creator-import:{platform}:{creator_id}"
+    job = create_job_repository().get_by_idempotency_key(
+        idempotency_key=key,
+    )
+    posts = create_post_repository()
+    return {
+        "creator_id": creator_id,
+        "import_job": job,
+        "discovered_posts": posts.count_for_creator(
+            platform=platform,
+            creator_id=creator_id,
+        ),
     }
 
 
