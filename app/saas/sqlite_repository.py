@@ -484,3 +484,78 @@ class SqliteSaasRepository:
             "applied": applied,
             "credits": balances,
         }
+
+
+    def entitled_post_ids(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_ids: list[str],
+        is_admin: bool,
+    ) -> set[str]:
+        if is_admin:
+            return set(post_ids)
+        if not post_ids:
+            return set()
+
+        placeholders = ",".join("?" for _ in post_ids)
+        with db_session() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT post_id
+                FROM dataset_entitlements
+                WHERE user_id=? AND platform=?
+                  AND post_id IN ({placeholders})
+                  AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+                """,
+                [user_id, platform, *post_ids],
+            ).fetchall()
+        return {str(row["post_id"]) for row in rows}
+
+    def has_creator_submission(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        creator_id: str,
+        is_admin: bool,
+    ) -> bool:
+        if is_admin:
+            return True
+        with db_session() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM creator_submissions
+                WHERE user_id=? AND platform=? AND creator_id=?
+                LIMIT 1
+                """,
+                (user_id, platform, creator_id),
+            ).fetchone()
+        return row is not None
+
+    def list_creator_submissions(
+        self,
+        *,
+        user_id: int,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    platform,
+                    creator_id,
+                    MAX(submitted_url) AS submitted_url,
+                    MAX(created_at) AS last_submitted_at,
+                    COUNT(*) AS submit_count
+                FROM creator_submissions
+                WHERE user_id=?
+                GROUP BY platform, creator_id
+                ORDER BY last_submitted_at DESC
+                LIMIT ?
+                """,
+                (user_id, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
