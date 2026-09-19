@@ -2,15 +2,16 @@ import asyncio
 import hashlib
 import ipaddress
 import mimetypes
-import os
 import socket
+import tempfile
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
 from app.core.repositories import MediaRepository
-from app.core.settings import get_settings
+from app.storage.base import ObjectStore
+from app.storage.factory import create_object_store
 
 
 class UnsafeMediaUrl(ValueError):
@@ -82,15 +83,30 @@ def _validate_content_type(media_type: str, content_type: str | None) -> None:
         raise ValueError(f"Expected video media but received {mime}")
 
 
+def _storage_key(item: dict, suffix: str) -> str:
+    post_id = str(item["post_id"])
+    media_type = str(item["media_type"])
+    filename = f"{item['id']}_{media_type}{suffix}"
+    comment_id = item.get("comment_id")
+    if comment_id:
+        return (
+            f"xiaohongshu/posts/{post_id}/comments/"
+            f"{comment_id}/{filename}"
+        )
+    return f"xiaohongshu/posts/{post_id}/media/{filename}"
+
+
 class MediaDownloadService:
     def __init__(
         self,
         *,
         repository: MediaRepository | None = None,
+        object_store: ObjectStore | None = None,
         max_bytes: int = 250 * 1024 * 1024,
         max_redirects: int = 5,
     ) -> None:
         self.repository = repository or MediaRepository()
+        self.object_store = object_store or create_object_store()
         self.max_bytes = max_bytes
         self.max_redirects = max_redirects
 
@@ -121,7 +137,7 @@ class MediaDownloadService:
             "total_candidates": len(items),
         }
 
-    async def _download_one(self, item: dict) -> Path:
+    async def _download_one(self, item: dict) -> str:
         self.repository.mark_downloading(media_id=item["id"])
 
         headers = {
@@ -157,36 +173,18 @@ class MediaDownloadService:
                     content_type = response.headers.get("content-type")
                     _validate_content_type(str(item["media_type"]), content_type)
                     suffix = _suffix_for(content_type, current_url)
-
-                    settings = get_settings()
-                    media_type = str(item["media_type"])
-                    comment_id = item.get("comment_id")
-                    if comment_id:
-                        target_dir = (
-                            settings.data_dir
-                            / "xiaohongshu"
-                            / "posts"
-                            / str(item["post_id"])
-                            / "comments"
-                            / str(comment_id)
-                        )
-                    else:
-                        target_dir = (
-                            settings.data_dir
-                            / "xiaohongshu"
-                            / "posts"
-                            / str(item["post_id"])
-                            / "media"
-                        )
-                    target_dir.mkdir(parents=True, exist_ok=True)
-
-                    target = target_dir / f"{item['id']}_{media_type}{suffix}"
-                    temp = target.with_suffix(target.suffix + ".part")
+                    key = _storage_key(item, suffix)
 
                     sha = hashlib.sha256()
                     total = 0
+                    with tempfile.NamedTemporaryFile(
+                        suffix=suffix,
+                        delete=False,
+                    ) as handle:
+                        temp_path = Path(handle.name)
+
                     try:
-                        with temp.open("wb") as file:
+                        with temp_path.open("wb") as file:
                             async for chunk in response.aiter_bytes():
                                 total += len(chunk)
                                 if total > self.max_bytes:
@@ -195,16 +193,22 @@ class MediaDownloadService:
                                     )
                                 sha.update(chunk)
                                 file.write(chunk)
-                        os.replace(temp, target)
+
+                        stored = await asyncio.to_thread(
+                            self.object_store.put_file,
+                            temp_path,
+                            key=key,
+                        )
                     finally:
-                        if temp.exists():
-                            temp.unlink(missing_ok=True)
+                        temp_path.unlink(missing_ok=True)
 
                     self.repository.mark_downloaded(
                         media_id=item["id"],
-                        local_path=str(target),
+                        local_path=stored.local_path,
+                        storage_backend=stored.backend,
+                        storage_key=stored.key,
                         sha256=sha.hexdigest(),
                     )
-                    return target
+                    return stored.key
 
         raise ValueError("Media download did not produce a terminal response.")
