@@ -1404,6 +1404,23 @@ class ChangeEventRepository:
 
 
 class RefreshRunRepository:
+    def list_for_creator(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT *
+                FROM refresh_runs
+                WHERE platform=? AND creator_id=?
+                ORDER BY id DESC
+                LIMIT ?
+            """, (platform, creator_id, limit)).fetchall()
+        return [dict(row) for row in rows]
+
     def start(
         self,
         *,
@@ -1520,6 +1537,22 @@ class RefreshScheduleRepository:
                     updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
             """, (f"+{interval_minutes} minutes", schedule_id))
+
+    def due_summary(self) -> dict[str, Any]:
+        with db_session() as connection:
+            row = connection.execute("""
+                SELECT
+                    SUM(CASE WHEN enabled=1 AND next_run_at <= CURRENT_TIMESTAMP
+                        THEN 1 ELSE 0 END) AS due,
+                    SUM(CASE WHEN enabled=1 THEN 1 ELSE 0 END) AS enabled,
+                    MIN(CASE WHEN enabled=1 THEN next_run_at END) AS next_run_at
+                FROM refresh_schedules
+            """).fetchone()
+        return {
+            "due": int(row["due"] or 0),
+            "enabled": int(row["enabled"] or 0),
+            "next_run_at": row["next_run_at"],
+        }
 
     def list_all(self, *, limit: int = 500) -> list[dict[str, Any]]:
         with db_session() as connection:
