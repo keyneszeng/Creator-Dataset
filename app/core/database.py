@@ -118,6 +118,18 @@ CREATE TABLE IF NOT EXISTS crawl_audits (
     notes TEXT,
     audited_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id INTEGER PRIMARY KEY,
+    platform TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    cursor TEXT,
+    finished BOOLEAN NOT NULL DEFAULT 0,
+    metadata_json TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, scope, object_id)
+);
 """
 
 
