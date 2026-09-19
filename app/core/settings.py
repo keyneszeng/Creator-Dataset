@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     database_path: Path = Path("data/creator_dataset.sqlite3")
 
+    # Xiaohongshu auth is environment-only. Never persist this value.
+    xhs_cookie: str = ""
+
     model_config = SettingsConfigDict(
         env_prefix="CREATOR_DATASET_",
         env_file=".env",
