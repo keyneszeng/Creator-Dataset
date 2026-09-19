@@ -8,7 +8,7 @@ from app.postgres.schema import (
     POSTGRES_REFRESH_SCHEMA,
 )
 
-POSTGRES_SCHEMA_VERSION = 6
+POSTGRES_SCHEMA_VERSION = 7
 POSTGRES_MIGRATION_LOCK_KEY = 48392178
 
 Migration = Callable[[Any], None]
@@ -196,6 +196,50 @@ def migration_006_payment_orders(cursor) -> None:
     """)
 
 
+def migration_007_llm_organization(cursor) -> None:
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS llm_connections (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            provider TEXT NOT NULL,
+            label TEXT NOT NULL,
+            model TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            secret_ciphertext TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(user_id, label)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_llm_connections_user
+        ON llm_connections(user_id, enabled);
+
+        CREATE TABLE IF NOT EXISTS llm_organization_runs (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            post_id TEXT NOT NULL,
+            connection_id BIGINT NOT NULL
+                REFERENCES llm_connections(id) ON DELETE CASCADE,
+            task TEXT NOT NULL,
+            custom_instruction TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING',
+            input_schema_version TEXT NOT NULL,
+            result_json JSONB,
+            error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            started_at TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_llm_runs_user_post
+        ON llm_organization_runs(user_id, post_id, id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_llm_runs_status
+        ON llm_organization_runs(status, created_at);
+    """)
+
+
 MIGRATIONS: list[tuple[int, Migration]] = [
     (1, migration_001_bootstrap),
     (2, migration_002_cloud_runtime_indexes),
@@ -203,6 +247,7 @@ MIGRATIONS: list[tuple[int, Migration]] = [
     (4, migration_004_dataset_artifacts),
     (5, migration_005_billing_events),
     (6, migration_006_payment_orders),
+    (7, migration_007_llm_organization),
 ]
 
 
