@@ -79,7 +79,7 @@ https://www.xiaohongshu.com/user/profile/<creator_id>
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -e ".[dev,xhs]"
+pip install -e ".[dev,xhs,ocr]"
 
 uvicorn app.main:app --reload
 ```
@@ -124,6 +124,7 @@ pytest
 - [首批研发 Backlog](docs/BACKLOG.md)
 - [认证与 Cookie 边界](docs/AUTHENTICATION.md)
 - [当前实现状态](docs/IMPLEMENTATION_STATUS.md)
+- [OCR Pipeline](docs/OCR.md)
 
 ## V0.1 技术建议
 
