@@ -6,8 +6,7 @@ from app.core.database import db_session
 
 def ensure_checkpoint_table() -> None:
     with db_session() as connection:
-        connection.execute(
-            """
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS checkpoints (
                 id INTEGER PRIMARY KEY,
                 platform TEXT NOT NULL,
@@ -19,24 +18,17 @@ def ensure_checkpoint_table() -> None:
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(platform, scope, object_id)
             )
-            """
-        )
+        """)
 
 
 class CheckpointRepository:
-    def get(
-        self, *, platform: str, scope: str, object_id: str
-    ) -> dict[str, Any] | None:
+    def get(self, *, platform: str, scope: str, object_id: str) -> dict[str, Any] | None:
         ensure_checkpoint_table()
         with db_session() as connection:
-            row = connection.execute(
-                """
-                SELECT cursor, finished, metadata_json
-                FROM checkpoints
+            row = connection.execute("""
+                SELECT cursor, finished, metadata_json FROM checkpoints
                 WHERE platform=? AND scope=? AND object_id=?
-                """,
-                (platform, scope, object_id),
-            ).fetchone()
+            """, (platform, scope, object_id)).fetchone()
         if row is None:
             return None
         return {
@@ -45,20 +37,11 @@ class CheckpointRepository:
             "metadata": json.loads(row["metadata_json"] or "{}"),
         }
 
-    def save(
-        self,
-        *,
-        platform: str,
-        scope: str,
-        object_id: str,
-        cursor: str,
-        finished: bool,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
+    def save(self, *, platform: str, scope: str, object_id: str, cursor: str,
+             finished: bool, metadata: dict[str, Any] | None = None) -> None:
         ensure_checkpoint_table()
         with db_session() as connection:
-            connection.execute(
-                """
+            connection.execute("""
                 INSERT INTO checkpoints (
                     platform, scope, object_id, cursor, finished, metadata_json
                 ) VALUES (?, ?, ?, ?, ?, ?)
@@ -67,13 +50,14 @@ class CheckpointRepository:
                     finished=excluded.finished,
                     metadata_json=excluded.metadata_json,
                     updated_at=CURRENT_TIMESTAMP
-                """,
-                (
-                    platform,
-                    scope,
-                    object_id,
-                    cursor,
-                    int(finished),
-                    json.dumps(metadata or {}, ensure_ascii=False),
-                ),
-            )
+            """, (platform, scope, object_id, cursor, int(finished),
+                  json.dumps(metadata or {}, ensure_ascii=False)))
+
+    def count_finished_prefix(self, *, platform: str, scope: str, object_id_prefix: str) -> int:
+        ensure_checkpoint_table()
+        with db_session() as connection:
+            row = connection.execute("""
+                SELECT COUNT(*) AS count FROM checkpoints
+                WHERE platform=? AND scope=? AND object_id LIKE ? AND finished=1
+            """, (platform, scope, f"{object_id_prefix}%")).fetchone()
+        return int(row["count"] or 0)
