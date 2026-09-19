@@ -44,6 +44,10 @@ CREATE TABLE IF NOT EXISTS posts (
     raw_json TEXT,
     platform_context_json TEXT,
     detail_raw_json TEXT,
+    discovery_fingerprint TEXT,
+    detail_fingerprint TEXT,
+    last_discovered_at DATETIME,
+    last_refreshed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(platform, post_id)
@@ -212,6 +216,39 @@ CREATE TABLE IF NOT EXISTS crawl_audits (
     audited_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS change_events (
+    id INTEGER PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT,
+    post_id TEXT,
+    entity_type TEXT NOT NULL,
+    change_type TEXT NOT NULL,
+    old_fingerprint TEXT,
+    new_fingerprint TEXT,
+    details_json TEXT,
+    detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_change_events_creator
+ON change_events(platform, creator_id, detected_at);
+
+CREATE INDEX IF NOT EXISTS idx_change_events_post
+ON change_events(platform, post_id, detected_at);
+
+CREATE TABLE IF NOT EXISTS refresh_runs (
+    id INTEGER PRIMARY KEY,
+    platform TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    new_posts INTEGER NOT NULL DEFAULT 0,
+    changed_posts INTEGER NOT NULL DEFAULT 0,
+    unchanged_posts INTEGER NOT NULL DEFAULT 0,
+    pages_scanned INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'RUNNING',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+);
+
 CREATE TABLE IF NOT EXISTS raw_snapshots (
     id INTEGER PRIMARY KEY,
     platform TEXT NOT NULL,
@@ -313,6 +350,18 @@ def init_database(database_path: Path | None = None) -> None:
             column="detail_raw_json",
             definition="TEXT",
         )
+        for column, definition in (
+            ("discovery_fingerprint", "TEXT"),
+            ("detail_fingerprint", "TEXT"),
+            ("last_discovered_at", "DATETIME"),
+            ("last_refreshed_at", "DATETIME"),
+        ):
+            _ensure_column(
+                connection,
+                table="posts",
+                column=column,
+                definition=definition,
+            )
         for column, definition in (
             ("parent_job_id", "INTEGER"),
             ("idempotency_key", "TEXT"),
