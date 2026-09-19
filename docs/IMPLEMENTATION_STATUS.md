@@ -84,12 +84,30 @@ POST /api/creators/{creator_id}/enrich-posts
 
 ### Milestone 4 — Media
 
-- [ ] images
-- [ ] video
-- [ ] cover
+- [ ] post images download
+- [ ] video download
+- [ ] cover download
+- [x] comment image URLs registered in media table
 - [ ] media manifest
 - [ ] SHA256
 - [ ] retry
+
+### OCR
+
+- [x] pluggable OcrEngine protocol
+- [x] RapidOCR local provider
+- [x] Chinese/English OCR mode
+- [x] line text + confidence + bounding boxes
+- [x] ocr_results persistence
+- [x] OCR failure state
+- [x] post image OCR API
+- [x] comment image OCR support after media download
+
+Endpoint:
+
+```text
+POST /api/posts/{post_id}/ocr-images
+```
 
 ### Milestone 5/6 — Comments
 
