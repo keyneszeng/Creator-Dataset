@@ -427,13 +427,14 @@ class MediaRepository:
             media_types.append("comment_image")
         placeholders = ",".join("?" for _ in media_types)
         query = f"""
-            SELECT id, post_id, comment_id, media_type, remote_url, local_path
+            SELECT id, post_id, comment_id, media_type, remote_url, local_path,
+                   storage_backend, storage_key
             FROM media
             WHERE post_id=?
               AND media_type IN ({placeholders})
               AND download_status='COMPLETE'
               AND is_active=1
-              AND local_path IS NOT NULL
+              AND storage_key IS NOT NULL
             ORDER BY id ASC
             LIMIT ?
         """
@@ -450,13 +451,14 @@ class MediaRepository:
     ) -> list[dict[str, Any]]:
         with db_session() as connection:
             rows = connection.execute("""
-                SELECT id, post_id, comment_id, media_type, remote_url, local_path
+                SELECT id, post_id, comment_id, media_type, remote_url, local_path,
+                       storage_backend, storage_key
                 FROM media
                 WHERE post_id=?
                   AND media_type='video'
                   AND download_status='COMPLETE'
                   AND is_active=1
-                  AND local_path IS NOT NULL
+                  AND storage_key IS NOT NULL
                 ORDER BY id ASC
                 LIMIT ?
             """, (post_id, limit)).fetchall()
@@ -489,15 +491,24 @@ class MediaRepository:
         self,
         *,
         media_id: int,
-        local_path: str,
+        local_path: str | None,
+        storage_backend: str,
+        storage_key: str,
         sha256: str | None = None,
     ) -> None:
         with db_session() as connection:
             connection.execute("""
                 UPDATE media
-                SET local_path=?, sha256=?, download_status='COMPLETE'
+                SET local_path=?, storage_backend=?, storage_key=?,
+                    sha256=?, download_status='COMPLETE'
                 WHERE id=?
-            """, (local_path, sha256, media_id))
+            """, (
+                local_path,
+                storage_backend,
+                storage_key,
+                sha256,
+                media_id,
+            ))
 
     def mark_failed(self, *, media_id: int) -> None:
         with db_session() as connection:
