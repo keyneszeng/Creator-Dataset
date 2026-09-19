@@ -474,3 +474,39 @@ See [SAAS.md](SAAS.md) and [BILLING.md](BILLING.md).
 - [x] constant-time bootstrap secret comparison
 - [x] Admin entitlement audit API
 - [x] Admin billing event audit API
+
+
+## Simplified Member Experience
+
+- [x] simplified Member information architecture
+- [x] four primary Member areas: Creators / Datasets / AI Organize / Account
+- [x] deterministic simple Dataset view
+- [x] unified Simplified Dataset Result schema
+- [x] raw/advanced details kept outside default Member view
+- [x] free Catalog remains concise
+- [x] Admin remains the advanced operational surface
+
+## User-connected LLM
+
+- [x] optional BYO-LLM architecture
+- [x] llm_connections schema on SQLite
+- [x] llm_connections schema on PostgreSQL
+- [x] llm_organization_runs schema
+- [x] OpenAI-compatible first adapter
+- [x] AES-GCM credential encryption at rest
+- [x] no API key exposure through Member list API
+- [x] exact-host cloud endpoint allow-list
+- [x] HTTPS requirement for cloud LLM endpoints
+- [x] local self-hosted/custom endpoint support
+- [x] explicit external-processing consent
+- [x] normalized text-only organization input
+- [x] bounded LLM input size
+- [x] durable LLM_ORGANIZE Worker Job
+- [x] provider result validation through Pydantic schema
+- [x] latest AI result automatically feeds Simple Dataset View
+- [x] LLM production readiness checks
+- [x] BYO-LLM costs separated from Dataset credits
+- [ ] provider-specific adapters beyond OpenAI-compatible
+- [ ] chunk/reduce organization for very large Datasets
+- [ ] token/cost usage accounting
+- [ ] hosted platform AI credit product
