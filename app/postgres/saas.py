@@ -245,6 +245,35 @@ class PostgresSaasRepository:
             "post_id": post_id,
         }
 
+    def grant_dataset_entitlement(
+        self,
+        *,
+        user_id: int,
+        platform: str,
+        post_id: str,
+        source: str,
+    ) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id FROM users
+                    WHERE id=%s AND status='active'
+                    """,
+                    (user_id,),
+                )
+                if cursor.fetchone() is None:
+                    raise ValueError("Unknown or inactive user.")
+                cursor.execute(
+                    """
+                    INSERT INTO dataset_entitlements (
+                        user_id, platform, post_id, source
+                    ) VALUES (%s, %s, %s, %s)
+                    ON CONFLICT(user_id, platform, post_id) DO NOTHING
+                    """,
+                    (user_id, platform, post_id, source),
+                )
+
     def has_entitlement(
         self,
         *,
