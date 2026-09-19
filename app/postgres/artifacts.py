@@ -69,3 +69,28 @@ class PostgresDatasetArtifactRepository:
         item = dict(row)
         item["artifacts"] = item.pop("artifacts_json")
         return item
+
+
+    def ready_post_ids(
+        self,
+        *,
+        platform: str,
+        post_ids: list[str],
+        dataset_schema_version: str,
+    ) -> set[str]:
+        if not post_ids:
+            return set()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT post_id
+                    FROM dataset_artifacts
+                    WHERE platform=%s
+                      AND dataset_schema_version=%s
+                      AND post_id = ANY(%s)
+                    """,
+                    (platform, dataset_schema_version, post_ids),
+                )
+                rows = cursor.fetchall()
+        return {str(row["post_id"]) for row in rows}
