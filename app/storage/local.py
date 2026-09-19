@@ -44,6 +44,15 @@ class LocalObjectStore:
     def delete(self, *, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
 
+    def access_url(
+        self,
+        *,
+        key: str,
+        expires_seconds: int = 900,
+    ) -> str | None:
+        # Local objects are served through the authenticated SaaS API.
+        return None
+
     @contextmanager
     def materialize(
         self,
