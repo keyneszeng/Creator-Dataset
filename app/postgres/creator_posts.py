@@ -105,6 +105,26 @@ class PostgresCreatorRepository(_PostgresBase):
                     json.dumps(raw, ensure_ascii=False),
                 ))
 
+    def get(
+        self,
+        *,
+        platform: str,
+        creator_id: str,
+    ) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT *
+                    FROM creators
+                    WHERE platform=%s AND creator_id=%s
+                """, (platform, creator_id))
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["raw"] = result.pop("raw_json") or {}
+        return result
+
     def set_discovered_post_count(
         self,
         *,
