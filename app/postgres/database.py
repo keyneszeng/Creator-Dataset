@@ -1,12 +1,8 @@
 from app.core.errors import IntegrationNotInstalled
-from app.postgres.schema import (
-    POSTGRES_CONTENT_SCHEMA,
-    POSTGRES_CREATOR_POST_SCHEMA,
-    POSTGRES_JOB_SCHEMA,
-    POSTGRES_REFRESH_SCHEMA,
+from app.postgres.migrations import (
+    POSTGRES_SCHEMA_VERSION,
+    apply_postgres_migrations,
 )
-
-POSTGRES_SCHEMA_VERSION = 1
 
 
 def _psycopg():
@@ -29,22 +25,7 @@ def connect_postgres(database_url: str):
 
 def init_postgres_database(database_url: str) -> None:
     with connect_postgres(database_url) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """)
-            cursor.execute(POSTGRES_CREATOR_POST_SCHEMA)
-            cursor.execute(POSTGRES_CONTENT_SCHEMA)
-            cursor.execute(POSTGRES_JOB_SCHEMA)
-            cursor.execute(POSTGRES_REFRESH_SCHEMA)
-            cursor.execute("""
-                INSERT INTO schema_migrations (version)
-                VALUES (%s)
-                ON CONFLICT(version) DO NOTHING
-            """, (POSTGRES_SCHEMA_VERSION,))
+        apply_postgres_migrations(connection)
 
 
 def postgres_schema_version(database_url: str) -> int:
