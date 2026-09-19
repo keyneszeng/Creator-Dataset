@@ -1,7 +1,7 @@
 import time
 from typing import Any
 
-from app.core.rate_limit import SharedRateLimiter
+from app.core.rate_limit import create_shared_rate_limiter
 from app.core.settings import get_settings
 
 from app.core.credentials import EnvironmentCredentialProvider, parse_cookie_header
@@ -13,7 +13,7 @@ class XiaohongshuGateway:
 
     def __init__(self, credential_provider: EnvironmentCredentialProvider | None = None) -> None:
         self.credential_provider = credential_provider or EnvironmentCredentialProvider()
-        self.rate_limiter = SharedRateLimiter(
+        self.rate_limiter = create_shared_rate_limiter(
             key="xiaohongshu-api",
             min_interval_seconds=get_settings().xhs_min_interval_seconds,
         )
