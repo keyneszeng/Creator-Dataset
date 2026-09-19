@@ -289,6 +289,28 @@ class MediaRepository:
             rows = connection.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
+    def list_pending_for_post(
+        self,
+        *,
+        post_id: str,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with db_session() as connection:
+            rows = connection.execute("""
+                SELECT id, platform, post_id, comment_id, media_type, remote_url
+                FROM media
+                WHERE post_id=? AND download_status IN ('PENDING', 'FAILED')
+                ORDER BY id ASC
+                LIMIT ?
+            """, (post_id, limit)).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_downloading(self, *, media_id: int) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE media SET download_status='RUNNING' WHERE id=?
+            """, (media_id,))
+
     def mark_downloaded(
         self,
         *,
@@ -302,6 +324,12 @@ class MediaRepository:
                 SET local_path=?, sha256=?, download_status='COMPLETE'
                 WHERE id=?
             """, (local_path, sha256, media_id))
+
+    def mark_failed(self, *, media_id: int) -> None:
+        with db_session() as connection:
+            connection.execute("""
+                UPDATE media SET download_status='FAILED' WHERE id=?
+            """, (media_id,))
 
 
 class OcrRepository:
@@ -361,3 +389,42 @@ class OcrRepository:
                     error=excluded.error,
                     updated_at=CURRENT_TIMESTAMP
             """, (media_id, engine, error))
+
+
+
+class ExportRepository:
+    def get_post_bundle(self, *, post_id: str) -> dict[str, Any] | None:
+        with db_session() as connection:
+            post = connection.execute("""
+                SELECT * FROM posts WHERE post_id=?
+            """, (post_id,)).fetchone()
+            if post is None:
+                return None
+
+            comments = connection.execute("""
+                SELECT * FROM comments
+                WHERE post_id=?
+                ORDER BY depth ASC, id ASC
+            """, (post_id,)).fetchall()
+
+            media = connection.execute("""
+                SELECT
+                    m.*,
+                    o.engine AS ocr_engine,
+                    o.engine_version AS ocr_engine_version,
+                    o.language AS ocr_language,
+                    o.full_text AS ocr_text,
+                    o.average_confidence AS ocr_confidence,
+                    o.blocks_json AS ocr_blocks_json,
+                    o.status AS ocr_status
+                FROM media m
+                LEFT JOIN ocr_results o ON o.media_id=m.id AND o.status='COMPLETE'
+                WHERE m.post_id=?
+                ORDER BY m.id ASC
+            """, (post_id,)).fetchall()
+
+        return {
+            "post": dict(post),
+            "comments": [dict(row) for row in comments],
+            "media": [dict(row) for row in media],
+        }
