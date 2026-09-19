@@ -15,6 +15,7 @@ from app.services.export import ExportService
 from app.services.media_pipeline import MediaPipelineService
 from app.services.ocr import OcrService
 from app.services.post_detail import PostDetailService
+from app.services.stt import SttService
 
 router = APIRouter()
 
@@ -48,6 +49,13 @@ class ProcessMediaRequest(BaseModel):
     download_limit: int = Field(default=200, ge=1, le=2000)
     run_ocr: bool = True
     ocr_limit: int = Field(default=500, ge=1, le=5000)
+    run_stt: bool = True
+    stt_limit: int = Field(default=20, ge=1, le=200)
+
+
+class TranscribeVideosRequest(BaseModel):
+    only_missing: bool = True
+    limit: int = Field(default=20, ge=1, le=200)
 
 
 def _raise_platform_http_error(exc: Exception) -> None:
@@ -209,6 +217,8 @@ async def process_media(
             download_limit=payload.download_limit,
             run_ocr=payload.run_ocr,
             ocr_limit=payload.ocr_limit,
+            run_stt=payload.run_stt,
+            stt_limit=payload.stt_limit,
         )
     except IntegrationNotInstalled as exc:
         raise HTTPException(
@@ -224,3 +234,22 @@ async def export_post(post_id: str) -> dict[str, str]:
         return service.export_post(post_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/posts/{post_id}/transcribe-videos")
+async def transcribe_videos(
+    post_id: str,
+    payload: TranscribeVideosRequest,
+) -> dict[str, int]:
+    try:
+        service = SttService()
+        return await service.process_post_videos(
+            post_id,
+            only_missing=payload.only_missing,
+            limit=payload.limit,
+        )
+    except IntegrationNotInstalled as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "STT_INTEGRATION_NOT_INSTALLED", "message": str(exc)},
+        ) from exc
