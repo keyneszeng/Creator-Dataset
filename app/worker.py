@@ -51,14 +51,31 @@ class DurableWorker:
         await PostDetailService().enrich_post(post_id)
 
         if payload.get("run_comments", True):
-            await CommentCrawlService().crawl_post(post_id)
+            comment_result = await CommentCrawlService().crawl_post(post_id)
+            if comment_result.status != "COMPLETE":
+                raise RuntimeError(
+                    f"Comment crawl incomplete for {post_id}: "
+                    f"{comment_result.status}"
+                )
 
         if payload.get("run_media", True):
-            await MediaPipelineService().process_post(
+            media_result = await MediaPipelineService().process_post(
                 post_id,
                 run_ocr=bool(payload.get("run_ocr", True)),
                 run_stt=bool(payload.get("run_stt", True)),
             )
+            download = media_result.get("download") or {}
+            ocr = media_result.get("ocr") or {}
+            stt = media_result.get("stt") or {}
+            failed = (
+                int(download.get("failed") or 0)
+                + int(ocr.get("failed") or 0)
+                + int(stt.get("failed") or 0)
+            )
+            if failed:
+                raise RuntimeError(
+                    f"Media pipeline has {failed} failed item(s) for {post_id}."
+                )
 
         if payload.get("export", True):
             ExportService().export_post(post_id)
@@ -120,6 +137,13 @@ class DurableWorker:
             )
 
         except IntegrationNotInstalled as exc:
+            self.jobs.mark_failed(
+                job_id=job_id,
+                error=str(exc),
+                status="FAILED",
+            )
+
+        except ValueError as exc:
             self.jobs.mark_failed(
                 job_id=job_id,
                 error=str(exc),
