@@ -25,6 +25,50 @@ class PostDetailService:
         self.posts = post_repository or PostRepository()
         self.media = media_repository or MediaRepository()
 
+    async def _enrich_row(self, row: dict) -> int:
+        context = row["platform_context"]
+        raw = await asyncio.to_thread(
+            self.gateway.get_post_detail,
+            row["post_id"],
+            xsec_token=str(context.get("xsec_token") or ""),
+            xsec_source=str(context.get("xsec_source") or "pc_feed"),
+        )
+        post = normalize_post_detail(raw, row["post_id"])
+        self.posts.update_detail(
+            platform="xiaohongshu",
+            post_id=row["post_id"],
+            title=post["title"],
+            content=post["content"],
+            post_type=post["post_type"],
+            published_at=post["published_at"],
+            like_count=post["like_count"],
+            favorite_count=post["favorite_count"],
+            share_count=post["share_count"],
+            reported_comment_count=post["reported_comment_count"],
+            raw=raw,
+        )
+
+        media_registered = 0
+        for media in post["media"]:
+            self.media.upsert(
+                platform="xiaohongshu",
+                post_id=row["post_id"],
+                comment_id=None,
+                media_type=media["media_type"],
+                remote_url=media["remote_url"],
+            )
+            media_registered += 1
+        return media_registered
+
+    async def enrich_post(self, post_id: str) -> int:
+        row = self.posts.get_access_context(
+            platform="xiaohongshu",
+            post_id=post_id,
+        )
+        if row is None:
+            raise ValueError(f"Unknown post: {post_id}")
+        return await self._enrich_row(row)
+
     async def enrich_creator(
         self,
         creator_id: str,
@@ -43,38 +87,7 @@ class PostDetailService:
         media_registered = 0
 
         for row in rows:
-            context = row["platform_context"]
-            raw = await asyncio.to_thread(
-                self.gateway.get_post_detail,
-                row["post_id"],
-                xsec_token=str(context.get("xsec_token") or ""),
-                xsec_source=str(context.get("xsec_source") or "pc_feed"),
-            )
-            post = normalize_post_detail(raw, row["post_id"])
-            self.posts.update_detail(
-                platform="xiaohongshu",
-                post_id=row["post_id"],
-                title=post["title"],
-                content=post["content"],
-                post_type=post["post_type"],
-                published_at=post["published_at"],
-                like_count=post["like_count"],
-                favorite_count=post["favorite_count"],
-                share_count=post["share_count"],
-                reported_comment_count=post["reported_comment_count"],
-                raw=raw,
-            )
-
-            for media in post["media"]:
-                self.media.upsert(
-                    platform="xiaohongshu",
-                    post_id=row["post_id"],
-                    comment_id=None,
-                    media_type=media["media_type"],
-                    remote_url=media["remote_url"],
-                )
-                media_registered += 1
-
+            media_registered += await self._enrich_row(row)
             enriched += 1
 
         return PostDetailBatchResult(
