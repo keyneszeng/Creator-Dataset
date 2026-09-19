@@ -36,12 +36,25 @@ def test_creator_queue_builds_stage_dag(
     )
 
     jobs = JobRepository()
-    post_jobs = jobs.list_children(parent_job_id=result.parent_job_id)
-    assert len(post_jobs) == 1
-    assert post_jobs[0]["job_type"] == "POST_PIPELINE"
-    assert post_jobs[0]["status"] == "WAITING"
+    creator_children = jobs.list_children(
+        parent_job_id=result.parent_job_id
+    )
+    by_creator_type = {
+        job["job_type"]: job for job in creator_children
+    }
+    assert set(by_creator_type) == {
+        "POST_PIPELINE",
+        "CREATOR_EXPORT",
+    }
 
-    stages = jobs.list_children(parent_job_id=post_jobs[0]["id"])
+    post_job = by_creator_type["POST_PIPELINE"]
+    creator_export = by_creator_type["CREATOR_EXPORT"]
+    assert post_job["status"] == "WAITING"
+    assert jobs.dependencies(job_id=creator_export["id"]) == [
+        post_job["id"]
+    ]
+
+    stages = jobs.list_children(parent_job_id=post_job["id"])
     stage_types = {job["job_type"] for job in stages}
     assert stage_types == {
         "POST_DETAIL",
