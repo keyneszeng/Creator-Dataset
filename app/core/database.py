@@ -200,6 +200,17 @@ CREATE TABLE IF NOT EXISTS crawl_audits (
     audited_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS workers (
+    worker_id TEXT PRIMARY KEY,
+    current_job_id INTEGER,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    heartbeat_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(current_job_id) REFERENCES jobs(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workers_heartbeat
+ON workers(heartbeat_at);
+
 CREATE TABLE IF NOT EXISTS rate_limits (
     key TEXT PRIMARY KEY,
     next_allowed_at REAL NOT NULL DEFAULT 0,
