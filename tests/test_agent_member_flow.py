@@ -8,7 +8,7 @@ from app.saas.models import Principal, UserRole
 from app.saas.sqlite_repository import SqliteSaasRepository
 
 
-def test_agent_member_uses_real_dataset_credits(
+def test_agent_member_prepares_datasets_for_free(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -18,6 +18,7 @@ def test_agent_member_uses_real_dataset_credits(
         storage_backend="local",
         storage_local_dir=tmp_path / "objects",
         saas_default_free_dataset_credits=5,
+        agent_free_mode=True,
     )
     settings.ensure_directories()
     database.init_database(settings.database_path)
@@ -25,6 +26,10 @@ def test_agent_member_uses_real_dataset_credits(
     monkeypatch.setattr(database, "get_settings", lambda: settings)
     monkeypatch.setattr(
         "app.repositories.factory.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "app.agent.service.get_settings",
         lambda: settings,
     )
 
@@ -67,36 +72,27 @@ def test_agent_member_uses_real_dataset_credits(
     )
 
     account = service.account_status()
-    assert account["free_credits"] == 5
-    assert account["unlimited"] is False
+    assert account["mode"] == "free"
+    assert account["unlimited"] is True
 
     catalog = service.creator_posts("creator-1")
-    assert catalog["items"][0]["unlocked"] is False
+    assert catalog["items"][0]["available"] is True
 
-    preview = service.dataset_unlock(
-        "post-1",
-        confirm=False,
-    )
-    assert preview["status"] == "CONFIRMATION_REQUIRED"
-    assert preview["credit_cost"] == 1
-    assert preview["free_credits"] == 5
+    before = access.credit_balance(user_id=user_id)
+    prepared = service.dataset_prepare("post-1")
+    assert prepared["status"] == "PREPARING"
+    assert prepared["free"] is True
 
-    unlocked = service.dataset_unlock(
-        "post-1",
-        confirm=True,
-    )
-    assert unlocked["status"] == "UNLOCKED"
-    assert unlocked["charged"] is True
-    assert unlocked["source"] == "free_credit"
-    assert unlocked["credits"]["free"] == 4
+    after = access.credit_balance(user_id=user_id)
+    assert after == before
 
-    catalog_after = service.creator_posts("creator-1")
-    assert catalog_after["items"][0]["unlocked"] is True
+    assert access.has_entitlement(
+        user_id=user_id,
+        platform="xiaohongshu",
+        post_id="post-1",
+        is_admin=False,
+    ) is True
 
-    repeated = service.dataset_unlock(
-        "post-1",
-        confirm=False,
-    )
-    assert repeated["status"] == "UNLOCKED"
-    assert repeated["charged"] is False
-    assert repeated["credits"]["free"] == 4
+    repeated = service.dataset_prepare("post-1")
+    assert repeated["free"] is True
+    assert access.credit_balance(user_id=user_id) == before
