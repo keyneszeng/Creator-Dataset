@@ -16,3 +16,7 @@ class IntegrationNotInstalled(CreatorDatasetError):
 
 class PlatformRequestError(CreatorDatasetError):
     """A platform request failed."""
+
+
+class ContinuationRequired(CreatorDatasetError):
+    """A bounded batch completed successfully but more work remains."""
