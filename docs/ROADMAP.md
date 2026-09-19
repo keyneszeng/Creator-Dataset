@@ -194,3 +194,33 @@ Knowledge Layer：
 - Product signals
 - semantic search
 - RAG
+
+
+## Reliability Track
+
+### Completed
+
+- durable SQLite Job queue
+- Worker lease and heartbeat
+- expired lease recovery
+- parent/child Job aggregation
+- retry with exponential backoff
+- idempotent enqueue
+- shared platform request pacing
+- worker/queue status endpoint
+- structured JSON logs
+- versioned export manifest
+- raw API response snapshots
+
+### Next
+
+1. explicit Repair Jobs
+2. stage-level Job fanout (DETAIL / COMMENTS / MEDIA / OCR / STT / EXPORT)
+3. formal schema migration framework
+4. object storage abstraction
+5. scheduled incremental Creator refresh
+6. Postgres repository backend
+7. Prometheus/OpenTelemetry metrics
+8. queue-age / BLOCKED / disk-space alerts
+9. retention policy for raw snapshots and Job history
+10. Creator-level export bundle + manifest
