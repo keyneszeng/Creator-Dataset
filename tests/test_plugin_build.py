@@ -15,9 +15,11 @@ def test_plugin_builder_rewrites_mcp_url(tmp_path: Path) -> None:
     config = json.loads(
         (target / "mcp.json").read_text(encoding="utf-8")
     )
+    server = config["mcpServers"]["creator-dataset"]
+    assert server["url"] == "https://creator.example.com/mcp"
     assert (
-        config["mcpServers"]["creator-dataset"]["url"]
-        == "https://creator.example.com/mcp"
+        server["bearer_token_env_var"]
+        == "CREATOR_DATASET_CLOUD_AGENT_TOKEN"
     )
 
     skill = (
@@ -57,3 +59,9 @@ def test_plugin_builder_allows_local_http_for_dev(
         allow_local_http=True,
     )
     assert (target / "plugin.json").exists()
+    config = json.loads(
+        (target / "mcp.json").read_text(encoding="utf-8")
+    )
+    assert "bearer_token_env_var" not in (
+        config["mcpServers"]["creator-dataset"]
+    )
