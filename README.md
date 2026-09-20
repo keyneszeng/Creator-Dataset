@@ -628,3 +628,67 @@ LLM 不修改原始 Creator/Post/Comment/OCR/STT 数据。
 用户 API Key 使用 AES-GCM 加密保存；云端 LLM Host 必须进入管理员 allow-list；连接外部 LLM 时需要明确确认会把已解锁 Dataset 的文本发送给该 Provider。
 
 BYO-LLM 可继续作为可选能力；当前 Creator Dataset 本身不对 Dataset Prepare 收费。
+
+
+## 云端统一服务
+
+当前推荐长期形态：
+
+```text
+                    Creator Dataset Cloud
+                           │
+                 HTTPS / one domain
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+        /mcp             /v1              /api
+          │                │                │
+   ChatGPT/Agent      Web/微信小程序      Admin
+          └────────────────┼────────────────┘
+                           │
+                     AgentService
+                           │
+              PostgreSQL + Worker + S3/R2
+```
+
+普通业务能力只实现一次，由 MCP 和 REST 两个适配层复用。
+
+个人云部署：
+
+```bash
+docker compose -f deploy/cloud-personal/docker-compose.yml up -d --build
+```
+
+详细见：
+
+- [Personal Cloud Deployment](deploy/cloud-personal/README.md)
+
+远程 MCP：
+
+```text
+https://YOUR_DOMAIN/mcp
+```
+
+轻量 REST：
+
+```text
+GET  /v1/account
+POST /v1/creators
+GET  /v1/creators/{creator_id}
+GET  /v1/creators/{creator_id}/posts
+POST /v1/datasets/{post_id}/prepare
+GET  /v1/datasets/{post_id}
+GET  /v1/datasets/{post_id}/content
+GET  /v1/datasets/{post_id}/comments
+```
+
+因此：
+
+```text
+ChatGPT Skill = Client #1
+微信小程序    = Client #2
+Web/App       = Client #3
+其他 Agent    = Client #4
+```
+
+Creator Dataset Core 本身是共享的数据服务。
