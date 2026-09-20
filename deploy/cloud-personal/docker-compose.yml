@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: creator_dataset
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: creator_dataset
+    volumes:
+      - creator_dataset_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U creator_dataset -d creator_dataset"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../..
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_ENVIRONMENT: production
+      CREATOR_DATASET_DEPLOYMENT_MODE: cloud
+      CREATOR_DATASET_DATABASE_BACKEND: postgres
+      CREATOR_DATASET_DATABASE_URL: postgresql://creator_dataset:${POSTGRES_PASSWORD}@postgres:5432/creator_dataset
+      CREATOR_DATASET_STORAGE_BACKEND: s3
+      CREATOR_DATASET_AGENT_FREE_MODE: "true"
+      CREATOR_DATASET_CLOUD_AGENT_TOKEN: ${CREATOR_DATASET_CLOUD_AGENT_TOKEN:?set CREATOR_DATASET_CLOUD_AGENT_TOKEN}
+      CREATOR_DATASET_MCP_ALLOWED_HOSTS: ${CREATOR_DATASET_DOMAIN:?set CREATOR_DATASET_DOMAIN}
+      CREATOR_DATASET_MCP_ALLOWED_ORIGINS: https://${CREATOR_DATASET_DOMAIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/system/readiness', timeout=3)"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../..
+    command: creator-dataset-worker
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_DEPLOYMENT_MODE: cloud
+      CREATOR_DATASET_DATABASE_BACKEND: postgres
+      CREATOR_DATASET_DATABASE_URL: postgresql://creator_dataset:${POSTGRES_PASSWORD}@postgres:5432/creator_dataset
+      CREATOR_DATASET_STORAGE_BACKEND: s3
+      CREATOR_DATASET_AGENT_FREE_MODE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ../..
+    command: creator-dataset-scheduler
+    env_file:
+      - ../../.env
+    environment:
+      CREATOR_DATASET_DEPLOYMENT_MODE: cloud
+      CREATOR_DATASET_DATABASE_BACKEND: postgres
+      CREATOR_DATASET_DATABASE_URL: postgresql://creator_dataset:${POSTGRES_PASSWORD}@postgres:5432/creator_dataset
+      CREATOR_DATASET_STORAGE_BACKEND: s3
+      CREATOR_DATASET_AGENT_FREE_MODE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      CREATOR_DATASET_DOMAIN: ${CREATOR_DATASET_DOMAIN:?set CREATOR_DATASET_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  creator_dataset_postgres:
+  caddy_data:
+  caddy_config:
