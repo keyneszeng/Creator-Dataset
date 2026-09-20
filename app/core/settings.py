@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     mcp_port: int = 8765
     mcp_user_api_key: str = ""
 
+    # Cloud personal-Agent mode. One private bearer token protects /mcp.
+    # Replace this with OAuth 2.1 when multi-user access is introduced.
+    cloud_agent_token: str = ""
+    mcp_allowed_hosts: str = ""
+    mcp_allowed_origins: str = ""
+
     # Current Agent product is free for personal use. Commercial billing
     # infrastructure remains dormant until this is disabled in the future.
     agent_free_mode: bool = True
