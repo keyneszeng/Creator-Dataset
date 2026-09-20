@@ -75,8 +75,11 @@ def check_readiness(*, deep_storage: bool = False) -> dict[str, object]:
     }
     ready = ready and api_auth_ok
 
+    cloud_mcp_required = (
+        production and settings.deployment_mode == "cloud"
+    )
     cloud_mcp_ok = (
-        settings.deployment_mode != "cloud"
+        (not cloud_mcp_required)
         or (
             bool(settings.cloud_agent_token)
             and bool(settings.mcp_allowed_hosts.strip())
