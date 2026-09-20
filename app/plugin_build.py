@@ -45,7 +45,14 @@ def build_plugin(
 
     mcp_path = target / "mcp.json"
     mcp_config = json.loads(mcp_path.read_text(encoding="utf-8"))
-    mcp_config["mcpServers"]["creator-dataset"]["url"] = safe_url
+    server = mcp_config["mcpServers"]["creator-dataset"]
+    server["url"] = safe_url
+    if safe_url.startswith("https://"):
+        server["bearer_token_env_var"] = (
+            "CREATOR_DATASET_CLOUD_AGENT_TOKEN"
+        )
+    else:
+        server.pop("bearer_token_env_var", None)
     mcp_path.write_text(
         json.dumps(mcp_config, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
