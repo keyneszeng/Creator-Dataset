@@ -43,10 +43,15 @@ def resolve_mcp_principal(
         )
 
     if settings.deployment_mode != "local":
-        raise RuntimeError(
-            "Cloud MCP requires user authentication. Configure a local "
-            "Member API key for development or implement OAuth 2.1 before "
-            "public deployment."
+        if not settings.cloud_agent_token:
+            raise RuntimeError(
+                "Cloud MCP requires CREATOR_DATASET_CLOUD_AGENT_TOKEN "
+                "until OAuth 2.1 identity mapping is implemented."
+            )
+        return Principal(
+            user_id=0,
+            email="personal-cloud-agent@system",
+            role=UserRole.ADMIN,
         )
 
     return Principal(
