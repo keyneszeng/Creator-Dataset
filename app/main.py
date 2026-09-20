@@ -30,7 +30,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         init_postgres_database(str(settings.database_url))
 
     try:
-        async with mcp.session_manager.run():
+        try:
+            async with mcp.session_manager.run():
+                yield
+        except RuntimeError as exc:
+            # Starlette TestClient may enter the same global app lifespan
+            # repeatedly in one Python process. MCP's session manager is
+            # intentionally single-run. Production ASGI processes enter the
+            # lifespan once; repeated test lifespans can continue without
+            # MCP because their REST assertions do not depend on it.
+            if "can only be called once per instance" not in str(exc):
+                raise
             yield
     finally:
         if database_backend == "postgres":
@@ -48,9 +58,12 @@ async def protect_internal_api(request: Request, call_next):
     settings = get_settings()
     path = request.url.path
 
+    deployment_mode = getattr(settings, "deployment_mode", "local")
+    cloud_agent_token = getattr(settings, "cloud_agent_token", "")
+
     if path.startswith("/mcp"):
-        if settings.deployment_mode == "cloud":
-            token = settings.cloud_agent_token
+        if deployment_mode == "cloud":
+            token = cloud_agent_token
             if not token:
                 return JSONResponse(
                     status_code=503,
@@ -87,15 +100,15 @@ async def protect_internal_api(request: Request, call_next):
 
     personal_cloud_authenticated = False
     if (
-        settings.deployment_mode == "cloud"
+        deployment_mode == "cloud"
         and (
             path.startswith("/api/")
             or path.startswith("/v1/")
         )
         and path not in public_paths
-        and settings.cloud_agent_token
+        and cloud_agent_token
     ):
-        expected = f"Bearer {settings.cloud_agent_token}"
+        expected = f"Bearer {cloud_agent_token}"
         supplied = request.headers.get("authorization", "")
         if not secrets.compare_digest(supplied, expected):
             return JSONResponse(
