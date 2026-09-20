@@ -134,6 +134,11 @@ def _init_runtime() -> None:
 def main() -> None:
     _init_runtime()
     settings = get_settings()
+    if settings.deployment_mode == "cloud":
+        raise SystemExit(
+            "Cloud MCP must run through the unified ASGI service: "
+            "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+        )
     transport = (
         sys.argv[1]
         if len(sys.argv) > 1
