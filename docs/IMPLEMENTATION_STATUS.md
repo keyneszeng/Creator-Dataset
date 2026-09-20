@@ -575,3 +575,24 @@ Default:
 ```text
 CREATOR_DATASET_AGENT_FREE_MODE=true
 ```
+
+
+## Unified Cloud Service
+
+- [x] MCP and REST served from one ASGI origin
+- [x] /mcp Agent endpoint
+- [x] compact /v1 REST application API
+- [x] /api admin/operations API retained
+- [x] personal cloud Bearer Token
+- [x] constant-time Agent Token comparison
+- [x] cloud MCP Host allow-list
+- [x] production readiness checks for private cloud security
+- [x] remote Plugin bearer_token_env_var support
+- [x] cloud standalone MCP disabled to prevent security bypass
+- [x] one-host Caddy HTTPS deployment
+- [x] PostgreSQL durable coordination
+- [x] S3/R2 shared object storage
+- [x] REST shape suitable for future WeChat Mini Program
+- [ ] OAuth 2.1 multi-user MCP identity
+- [ ] WeChat Mini Program client
+- [ ] public Plugin deployment
