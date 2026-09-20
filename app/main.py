@@ -84,8 +84,31 @@ async def protect_internal_api(request: Request, call_next):
         "/api/system/capabilities",
     }
 
+    personal_cloud_authenticated = False
     if (
-        getattr(settings, "saas_auth_enabled", False)
+        settings.deployment_mode == "cloud"
+        and path.startswith("/api/")
+        and path not in public_paths
+        and settings.cloud_agent_token
+    ):
+        expected = f"Bearer {settings.cloud_agent_token}"
+        supplied = request.headers.get("authorization", "")
+        if not secrets.compare_digest(supplied, expected):
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": {
+                        "code": "INVALID_AGENT_TOKEN",
+                        "message": "A valid Agent bearer token is required.",
+                    }
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        personal_cloud_authenticated = True
+
+    if (
+        not personal_cloud_authenticated
+        and getattr(settings, "saas_auth_enabled", False)
         and path.startswith("/api/")
         and not path.startswith("/api/saas/")
         and path not in public_paths
