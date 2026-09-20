@@ -56,21 +56,49 @@ def check_readiness(*, deep_storage: bool = False) -> dict[str, object]:
         ready = False
 
     production = str(settings.environment).lower() == "production"
-    saas_auth_ok = (not production) or bool(settings.saas_auth_enabled)
-    checks["saas_security"] = {
-        "ok": saas_auth_ok,
+    personal_cloud_auth = bool(settings.cloud_agent_token)
+    api_auth_ok = (
+        (not production)
+        or bool(settings.saas_auth_enabled)
+        or personal_cloud_auth
+    )
+    checks["api_security"] = {
+        "ok": api_auth_ok,
         "environment": settings.environment,
-        "auth_enabled": bool(settings.saas_auth_enabled),
-        "bootstrap_key_configured": bool(
-            settings.saas_bootstrap_admin_key
-        ),
+        "saas_auth_enabled": bool(settings.saas_auth_enabled),
+        "personal_cloud_token_configured": personal_cloud_auth,
         "message": (
-            "Production requires SaaS authentication."
-            if not saas_auth_ok
-            else "SaaS authentication configuration is acceptable."
+            "Production requires SaaS auth or a private cloud Agent token."
+            if not api_auth_ok
+            else "API authentication configuration is acceptable."
         ),
     }
-    ready = ready and saas_auth_ok
+    ready = ready and api_auth_ok
+
+    cloud_mcp_ok = (
+        settings.deployment_mode != "cloud"
+        or (
+            bool(settings.cloud_agent_token)
+            and bool(settings.mcp_allowed_hosts.strip())
+        )
+    )
+    checks["mcp_security"] = {
+        "ok": cloud_mcp_ok,
+        "deployment_mode": settings.deployment_mode,
+        "private_token_configured": bool(settings.cloud_agent_token),
+        "allowed_hosts_configured": bool(
+            settings.mcp_allowed_hosts.strip()
+        ),
+        "message": (
+            "Cloud MCP security configuration is acceptable."
+            if cloud_mcp_ok
+            else (
+                "Cloud MCP requires a private Agent token and explicit "
+                "Host allow-list."
+            )
+        ),
+    }
+    ready = ready and cloud_mcp_ok
 
     llm_key_ok = (
         (not settings.llm_enabled)
