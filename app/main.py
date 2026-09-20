@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+import secrets
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,6 +12,8 @@ from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.postgres.database import init_postgres_database
 from app.postgres.pool import close_postgres_pools
+from app.mcp_hosting import build_mcp_asgi_app
+from app.mcp_server import mcp
 from app.saas.auth import authenticate_headers
 
 
@@ -26,7 +29,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         init_postgres_database(str(settings.database_url))
 
     try:
-        yield
+        async with mcp.session_manager.run():
+            yield
     finally:
         if database_backend == "postgres":
             close_postgres_pools()
@@ -42,6 +46,37 @@ app = FastAPI(
 async def protect_internal_api(request: Request, call_next):
     settings = get_settings()
     path = request.url.path
+
+    if path.startswith("/mcp"):
+        if settings.deployment_mode == "cloud":
+            token = settings.cloud_agent_token
+            if not token:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "detail": {
+                            "code": "MCP_TOKEN_NOT_CONFIGURED",
+                            "message": (
+                                "Cloud MCP is disabled until a private "
+                                "Agent token is configured."
+                            ),
+                        }
+                    },
+                )
+            expected = f"Bearer {token}"
+            supplied = request.headers.get("authorization", "")
+            if not secrets.compare_digest(supplied, expected):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "detail": {
+                            "code": "INVALID_AGENT_TOKEN",
+                            "message": "A valid Agent bearer token is required.",
+                        }
+                    },
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     public_paths = {
         "/api/health",
@@ -94,3 +129,8 @@ async def protect_internal_api(request: Request, call_next):
 
 app.include_router(router, prefix="/api")
 app.include_router(saas_router, prefix="/api")
+
+
+# Keep API routes first. The mounted MCP app handles /mcp on the same
+# HTTPS origin without creating a separate public service.
+app.mount("/", build_mcp_asgi_app(get_settings()))
