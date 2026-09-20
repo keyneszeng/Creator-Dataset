@@ -58,7 +58,7 @@ def test_production_readiness_requires_saas_auth(
     result = check_readiness()
 
     assert result["ready"] is False
-    assert result["checks"]["saas_security"]["ok"] is False
+    assert result["checks"]["api_security"]["ok"] is False
 
 
 def test_production_readiness_accepts_enabled_saas_auth(
@@ -84,4 +84,61 @@ def test_production_readiness_accepts_enabled_saas_auth(
     result = check_readiness()
 
     assert result["ready"] is True
-    assert result["checks"]["saas_security"]["ok"] is True
+    assert result["checks"]["api_security"]["ok"] is True
+
+
+
+def test_personal_cloud_readiness_accepts_private_agent_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = Settings(
+        environment="production",
+        deployment_mode="cloud",
+        database_backend="sqlite",
+        database_path=tmp_path / "cloud.sqlite3",
+        data_dir=tmp_path / "data",
+        storage_backend="local",
+        storage_local_dir=tmp_path / "objects",
+        saas_auth_enabled=False,
+        cloud_agent_token="private-token",
+        mcp_allowed_hosts="creator.example.com,creator.example.com:443",
+    )
+    settings.ensure_directories()
+    database.init_database(settings.database_path)
+
+    monkeypatch.setattr(database, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.readiness.get_settings", lambda: settings)
+
+    result = check_readiness()
+
+    assert result["ready"] is True
+    assert result["checks"]["api_security"]["ok"] is True
+    assert result["checks"]["mcp_security"]["ok"] is True
+
+
+def test_cloud_readiness_requires_mcp_host_allowlist(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = Settings(
+        environment="production",
+        deployment_mode="cloud",
+        database_backend="sqlite",
+        database_path=tmp_path / "cloud-bad.sqlite3",
+        data_dir=tmp_path / "data",
+        storage_backend="local",
+        storage_local_dir=tmp_path / "objects",
+        cloud_agent_token="private-token",
+        mcp_allowed_hosts="",
+    )
+    settings.ensure_directories()
+    database.init_database(settings.database_path)
+
+    monkeypatch.setattr(database, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.core.readiness.get_settings", lambda: settings)
+
+    result = check_readiness()
+
+    assert result["ready"] is False
+    assert result["checks"]["mcp_security"]["ok"] is False
