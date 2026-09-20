@@ -65,7 +65,7 @@ Media can live in:
 - MinIO
 - other S3-compatible services
 
-### 3. Cloud Multi-node — Future
+### 3. Cloud Multi-node — Supported
 
 Target topology:
 
@@ -83,9 +83,16 @@ S3/Object Storage
 Scheduler singleton / leader
 ```
 
-This topology is **not yet supported** because the current durable Job queue uses SQLite transactions and leases.
+This topology is supported when:
 
-Do not place SQLite on a network filesystem and run Workers across multiple hosts.
+```text
+CREATOR_DATASET_DATABASE_BACKEND=postgres
+CREATOR_DATASET_STORAGE_BACKEND=s3
+```
+
+PostgreSQL coordinates Worker claims and leases with row locking, while all Workers share S3-compatible object storage.
+
+SQLite remains single-host only. Do not place SQLite on a network filesystem and run Workers across multiple hosts.
 
 ## Capability Introspection
 
@@ -226,3 +233,32 @@ Then enable:
 - distributed durable queue claims
 
 Decoupling object storage before database migration reduces migration risk.
+
+
+## Personal Cloud Agent Service
+
+For the current personal-use Agent product, use:
+
+```text
+deploy/cloud-personal/
+```
+
+This profile exposes one HTTPS origin:
+
+```text
+https://creator.example.com/mcp
+https://creator.example.com/v1
+https://creator.example.com/api
+```
+
+Consumers:
+
+```text
+ChatGPT / Codex / Agents → /mcp
+Web / WeChat Mini Program → /v1
+Admin / operations → /api
+```
+
+The current personal cloud security model uses one private Bearer token and explicit MCP Host allow-list.
+
+See [../deploy/cloud-personal/README.md](../deploy/cloud-personal/README.md).
