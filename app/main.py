@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import router
 from app.api.saas_routes import router as saas_router
+from app.api.agent_routes import router as agent_router
 from app.core.database import init_database
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
@@ -87,7 +88,10 @@ async def protect_internal_api(request: Request, call_next):
     personal_cloud_authenticated = False
     if (
         settings.deployment_mode == "cloud"
-        and path.startswith("/api/")
+        and (
+            path.startswith("/api/")
+            or path.startswith("/v1/")
+        )
         and path not in public_paths
         and settings.cloud_agent_token
     ):
@@ -152,6 +156,7 @@ async def protect_internal_api(request: Request, call_next):
 
 app.include_router(router, prefix="/api")
 app.include_router(saas_router, prefix="/api")
+app.include_router(agent_router)
 
 
 # Keep API routes first. The mounted MCP app handles /mcp on the same
