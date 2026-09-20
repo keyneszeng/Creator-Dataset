@@ -39,7 +39,7 @@ def build_mcp_asgi_app(settings: Settings):
     )
 
     return mcp.streamable_http_app(
-        streamable_http_path="/",
+        streamable_http_path="/mcp",
         json_response=True,
         stateless_http=True,
         host=settings.mcp_host,
